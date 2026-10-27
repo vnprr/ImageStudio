@@ -1,0 +1,31 @@
+# runtime data and models never belong in the repository
+/data/
+/models/
+*.db
+*.db-wal
+*.db-shm
+*.log
+settings.json
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.gguf
+
+# build output and dependencies
+node_modules/
+frontend/dist/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# local machine files
+*.lnk
+.claude/
+.env
+.env.*
+tools/bench_*.png
+tools/chk_*.png
+Thumbs.db
+desktop.ini

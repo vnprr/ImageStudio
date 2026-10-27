@@ -1,0 +1,14 @@
+# Instaluj do istniejącego venv z PyTorch ROCm (NIE instaluj torch ponownie!).
+# Bezpiecznie, bez ruszania torcha/transformers:
+#   pip freeze > constraints.txt
+#   pip install -c constraints.txt -r backend/requirements.txt
+diffusers>=0.41
+accelerate
+peft
+fastapi
+uvicorn[standard]
+python-multipart
+requests
+psutil
+pillow
+huggingface_hub

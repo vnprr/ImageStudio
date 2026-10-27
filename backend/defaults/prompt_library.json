@@ -1,0 +1,603 @@
+{
+ "snippets": [
+  {
+   "id": "CAM-01",
+   "cat": "camera",
+   "title": "85 mm portrait",
+   "text": "shot on an 85mm portrait lens, natural facial proportions, shallow depth of field"
+  },
+  {
+   "id": "CAM-02",
+   "cat": "camera",
+   "title": "35 mm lens",
+   "text": "35mm lens, environmental context, natural perspective"
+  },
+  {
+   "id": "CAM-03",
+   "cat": "camera",
+   "title": "50 mm lens",
+   "text": "50mm prime lens, natural human field of view"
+  },
+  {
+   "id": "CAM-04",
+   "cat": "camera",
+   "title": "Telephoto",
+   "text": "135mm telephoto lens, compressed background and subject separation"
+  },
+  {
+   "id": "CAM-05",
+   "cat": "camera",
+   "title": "100 mm macro",
+   "text": "100mm macro lens, close focus and fine surface detail"
+  },
+  {
+   "id": "CAM-06",
+   "cat": "camera",
+   "title": "Analog 35 mm film",
+   "text": "35mm analog film photography, organic grain and soft highlights"
+  },
+  {
+   "id": "CAM-07",
+   "cat": "camera",
+   "title": "Eye level",
+   "text": "camera at eye level, natural proportions"
+  },
+  {
+   "id": "CAM-08",
+   "cat": "camera",
+   "title": "Cinematic long lens",
+   "text": "cinematic long lens, shallow focus, gentle background compression"
+  },
+  {
+   "id": "PER-01",
+   "cat": "perspective",
+   "title": "Front view",
+   "text": "straight-on frontal view, symmetrical alignment, facing the camera"
+  },
+  {
+   "id": "PER-02",
+   "cat": "perspective",
+   "title": "Three-quarter view",
+   "text": "three-quarter view, both eyes visible, subtle shoulder rotation"
+  },
+  {
+   "id": "PER-03",
+   "cat": "perspective",
+   "title": "Left profile",
+   "text": "strict left-side profile view, stable silhouette"
+  },
+  {
+   "id": "PER-04",
+   "cat": "perspective",
+   "title": "Right profile",
+   "text": "strict right-side profile view, stable silhouette"
+  },
+  {
+   "id": "PER-05",
+   "cat": "perspective",
+   "title": "Back view",
+   "text": "back view, shoulders facing away from the camera"
+  },
+  {
+   "id": "PER-06",
+   "cat": "perspective",
+   "title": "Low angle",
+   "text": "low-angle shot, imposing perspective"
+  },
+  {
+   "id": "PER-07",
+   "cat": "perspective",
+   "title": "High angle",
+   "text": "high-angle shot, camera looking down"
+  },
+  {
+   "id": "PER-08",
+   "cat": "perspective",
+   "title": "Bird's-eye view",
+   "text": "bird's-eye view, looking vertically downward"
+  },
+  {
+   "id": "PER-09",
+   "cat": "perspective",
+   "title": "Isometric",
+   "text": "isometric perspective, parallel projection"
+  },
+  {
+   "id": "PER-10",
+   "cat": "perspective",
+   "title": "Over the shoulder",
+   "text": "over-the-shoulder camera angle"
+  },
+  {
+   "id": "LGT-01",
+   "cat": "lighting",
+   "title": "Soft studio",
+   "text": "large softbox studio lighting, smooth shadow transitions"
+  },
+  {
+   "id": "LGT-02",
+   "cat": "lighting",
+   "title": "Rembrandt",
+   "text": "Rembrandt lighting with a triangle of light on the shadow-side cheek"
+  },
+  {
+   "id": "LGT-03",
+   "cat": "lighting",
+   "title": "Butterfly",
+   "text": "butterfly portrait lighting, elevated frontal key light"
+  },
+  {
+   "id": "LGT-04",
+   "cat": "lighting",
+   "title": "Dramatic side light",
+   "text": "dramatic side lighting, high contrast, deep shadows"
+  },
+  {
+   "id": "LGT-05",
+   "cat": "lighting",
+   "title": "Rim light",
+   "text": "restrained rim light outlining the subject"
+  },
+  {
+   "id": "LGT-06",
+   "cat": "lighting",
+   "title": "Neon",
+   "text": "mixed red and cyan neon practical lights, cinematic contrast"
+  },
+  {
+   "id": "LGT-07",
+   "cat": "lighting",
+   "title": "Candlelight",
+   "text": "soft flickering candlelight illuminating the face"
+  },
+  {
+   "id": "LGT-08",
+   "cat": "lighting",
+   "title": "Moonlight",
+   "text": "cold moonlight, delicate bluish shadows"
+  },
+  {
+   "id": "LGT-09",
+   "cat": "lighting",
+   "title": "Golden hour",
+   "text": "warm low-angle sunlight, long soft shadows"
+  },
+  {
+   "id": "LGT-10",
+   "cat": "lighting",
+   "title": "Volumetric",
+   "text": "subtle volumetric light rays through haze and dust"
+  },
+  {
+   "id": "LOC-01",
+   "cat": "location",
+   "title": "Rainy street",
+   "text": "rain-soaked city street at night, reflective asphalt and sparse neon"
+  },
+  {
+   "id": "LOC-02",
+   "cat": "location",
+   "title": "Forest clearing",
+   "text": "sunlit forest clearing, tall trees, drifting pollen in the air"
+  },
+  {
+   "id": "LOC-03",
+   "cat": "location",
+   "title": "Mountain lake",
+   "text": "calm alpine lake at dawn, mist over the water, distant peaks"
+  },
+  {
+   "id": "LOC-04",
+   "cat": "location",
+   "title": "Cozy interior",
+   "text": "cozy living room, warm lamps, wooden furniture, soft textiles"
+  },
+  {
+   "id": "LOC-05",
+   "cat": "location",
+   "title": "Desert dunes",
+   "text": "wide desert dunes, rippled sand, clear sky, long shadows"
+  },
+  {
+   "id": "LOC-06",
+   "cat": "location",
+   "title": "Old library",
+   "text": "old library with tall shelves, ladders, dust in the light"
+  },
+  {
+   "id": "LOC-07",
+   "cat": "location",
+   "title": "Studio backdrop",
+   "text": "plain seamless studio backdrop, neutral gray"
+  },
+  {
+   "id": "STY-01",
+   "cat": "style",
+   "title": "Photorealistic",
+   "text": "photorealistic editorial photography, plausible optics"
+  },
+  {
+   "id": "STY-02",
+   "cat": "style",
+   "title": "Painterly",
+   "text": "painterly digital illustration, expressive brushwork"
+  },
+  {
+   "id": "STY-03",
+   "cat": "style",
+   "title": "Cel shading",
+   "text": "cel-shaded illustration with controlled edges and clean shadows"
+  },
+  {
+   "id": "STY-04",
+   "cat": "style",
+   "title": "Watercolor",
+   "text": "soft watercolor illustration, visible paper texture, light washes"
+  },
+  {
+   "id": "STY-05",
+   "cat": "style",
+   "title": "Graphic novel",
+   "text": "graphic novel illustration, confident ink lines, flat color blocking"
+  },
+  {
+   "id": "STY-06",
+   "cat": "style",
+   "title": "Pixel art",
+   "text": "pixel art, limited palette, clean pixel clusters"
+  },
+  {
+   "id": "STY-07",
+   "cat": "style",
+   "title": "Concept art",
+   "text": "concept art, atmospheric depth, strong silhouette and value structure"
+  },
+  {
+   "id": "STY-08",
+   "cat": "style",
+   "title": "Film still",
+   "text": "cinematic film still, subtle grain, natural color grading"
+  },
+  {
+   "id": "CMP-01",
+   "cat": "composition",
+   "title": "Centered",
+   "text": "centered subject, stable visual balance"
+  },
+  {
+   "id": "CMP-02",
+   "cat": "composition",
+   "title": "Rule of thirds",
+   "text": "rule of thirds composition, deliberate focal point"
+  },
+  {
+   "id": "CMP-03",
+   "cat": "composition",
+   "title": "Negative space",
+   "text": "generous negative space, restrained visual hierarchy"
+  },
+  {
+   "id": "CMP-04",
+   "cat": "composition",
+   "title": "Full body",
+   "text": "full-body framing, head, hands and feet completely visible"
+  },
+  {
+   "id": "CMP-05",
+   "cat": "composition",
+   "title": "Waist-up",
+   "text": "medium shot from the waist up"
+  },
+  {
+   "id": "CMP-06",
+   "cat": "composition",
+   "title": "Close-up",
+   "text": "tight portrait crop, emphasis on the eyes"
+  },
+  {
+   "id": "CMP-07",
+   "cat": "composition",
+   "title": "Wide shot",
+   "text": "wide establishing shot with environmental storytelling"
+  },
+  {
+   "id": "CMP-08",
+   "cat": "composition",
+   "title": "Layered depth",
+   "text": "foreground, midground and background clearly separated"
+  },
+  {
+   "id": "CHR-01",
+   "cat": "character",
+   "title": "Neutral stance",
+   "text": "standing neutrally, weight balanced on both feet"
+  },
+  {
+   "id": "CHR-02",
+   "cat": "character",
+   "title": "Contrapposto",
+   "text": "subtle contrapposto stance, weight shifted onto one leg"
+  },
+  {
+   "id": "CHR-03",
+   "cat": "character",
+   "title": "Hand on hip",
+   "text": "one hand resting on the hip, other arm relaxed"
+  },
+  {
+   "id": "CHR-04",
+   "cat": "character",
+   "title": "Arms crossed",
+   "text": "arms folded naturally across the chest"
+  },
+  {
+   "id": "CHR-05",
+   "cat": "character",
+   "title": "Looking over shoulder",
+   "text": "looking over the shoulder, natural torso rotation"
+  },
+  {
+   "id": "CHR-06",
+   "cat": "character",
+   "title": "Glancing aside",
+   "text": "eyes glancing sideways, minimal head movement"
+  },
+  {
+   "id": "ATM-01",
+   "cat": "mood",
+   "title": "Calm",
+   "text": "quiet calm, soft stillness, subdued atmosphere"
+  },
+  {
+   "id": "ATM-02",
+   "cat": "mood",
+   "title": "Tension",
+   "text": "restrained tension, uneasy calm"
+  },
+  {
+   "id": "ATM-03",
+   "cat": "mood",
+   "title": "Dreamy",
+   "text": "dreamlike atmosphere, haze and soft focus"
+  },
+  {
+   "id": "ATM-04",
+   "cat": "mood",
+   "title": "Cheerful",
+   "text": "cheerful, bright and lively atmosphere"
+  },
+  {
+   "id": "ATM-05",
+   "cat": "mood",
+   "title": "Nostalgic",
+   "text": "nostalgic, warm faded tones, gentle grain"
+  },
+  {
+   "id": "ANI-01",
+   "cat": "animation",
+   "title": "Clean silhouette",
+   "text": "clean full-body silhouette, readable shapes, limbs clearly separated"
+  },
+  {
+   "id": "ANI-02",
+   "cat": "animation",
+   "title": "Separated hair layers",
+   "text": "hair in separated front and back layers"
+  },
+  {
+   "id": "ANI-03",
+   "cat": "animation",
+   "title": "Flat game asset",
+   "text": "flat 2D game asset on a plain background, strong outline, no cast shadow"
+  },
+  {
+   "id": "ANI-04",
+   "cat": "animation",
+   "title": "Model sheet",
+   "text": "neutral character model sheet, consistent anatomy across views"
+  },
+  {
+   "id": "ANI-05",
+   "cat": "animation",
+   "title": "Keep proportions",
+   "text": "preserve anatomical proportions and joint continuity across poses"
+  },
+  {
+   "id": "CLR-01",
+   "cat": "color",
+   "title": "Steel blue",
+   "text": "steel blue and graphite palette"
+  },
+  {
+   "id": "CLR-02",
+   "cat": "color",
+   "title": "Burgundy and charcoal",
+   "text": "burgundy, charcoal and warm metallic accents"
+  },
+  {
+   "id": "CLR-03",
+   "cat": "color",
+   "title": "Amber and navy",
+   "text": "deep navy shadows and warm amber highlights"
+  },
+  {
+   "id": "CLR-04",
+   "cat": "color",
+   "title": "Muted teal",
+   "text": "muted teal and deep neutral gray"
+  },
+  {
+   "id": "CLR-05",
+   "cat": "color",
+   "title": "Black and ivory",
+   "text": "soft black and warm ivory tones"
+  },
+  {
+   "id": "CLR-06",
+   "cat": "color",
+   "title": "Pastel",
+   "text": "soft pastel palette, low contrast"
+  },
+  {
+   "id": "NEG-01",
+   "cat": "negative",
+   "title": "No extra fingers",
+   "text": "no extra fingers, no fused fingers, no malformed hands"
+  },
+  {
+   "id": "NEG-02",
+   "cat": "negative",
+   "title": "No face distortion",
+   "text": "no distorted facial anatomy, no asymmetrical eyes"
+  },
+  {
+   "id": "NEG-03",
+   "cat": "negative",
+   "title": "No broken joints",
+   "text": "no broken joints, no unnatural limb bends"
+  },
+  {
+   "id": "NEG-04",
+   "cat": "negative",
+   "title": "No cropped limbs",
+   "text": "no cropped hands, no cropped feet, no missing limbs"
+  },
+  {
+   "id": "NEG-05",
+   "cat": "negative",
+   "title": "No text",
+   "text": "no text, no logos, no watermarks"
+  },
+  {
+   "id": "NEG-06",
+   "cat": "negative",
+   "title": "Natural skin",
+   "text": "no plastic skin, no excessive smoothing"
+  },
+  {
+   "id": "NEG-07",
+   "cat": "negative",
+   "title": "Not cluttered",
+   "text": "no excessive decorative elements or busy background"
+  },
+  {
+   "id": "NEG-08",
+   "cat": "negative",
+   "title": "Consistent identity",
+   "text": "preserve the same character identity, hairstyle and costume"
+  },
+  {
+   "id": "NEG-09",
+   "cat": "negative",
+   "title": "Consistent light",
+   "text": "no contradictory light directions or unexplained glowing edges"
+  }
+ ],
+ "packs": [
+  {
+   "id": "SET-01",
+   "name": "Analog portrait",
+   "cat": "photo",
+   "desc": "Natural skin, film grain, soft light",
+   "ids": [
+    "CAM-01",
+    "CAM-06",
+    "LGT-01",
+    "CMP-06",
+    "NEG-06"
+   ],
+   "extra": ""
+  },
+  {
+   "id": "SET-02",
+   "name": "Fashion editorial",
+   "cat": "photo",
+   "desc": "Cinematic light, clean composition",
+   "ids": [
+    "CAM-02",
+    "STY-01",
+    "LGT-04",
+    "CMP-05",
+    "CLR-04"
+   ],
+   "extra": ""
+  },
+  {
+   "id": "SET-03",
+   "name": "Rembrandt portrait",
+   "cat": "photo",
+   "desc": "Classic portrait lighting",
+   "ids": [
+    "CAM-01",
+    "LGT-02",
+    "CMP-06"
+   ],
+   "extra": ""
+  },
+  {
+   "id": "SET-04",
+   "name": "Character turnaround",
+   "cat": "character",
+   "desc": "Consistent character views",
+   "ids": [
+    "PER-01",
+    "CMP-04",
+    "ANI-04",
+    "ANI-05",
+    "NEG-03"
+   ],
+   "extra": ""
+  },
+  {
+   "id": "SET-05",
+   "name": "Flat 2D asset",
+   "cat": "character",
+   "desc": "Simple game-ready object",
+   "ids": [
+    "STY-03",
+    "ANI-03",
+    "ANI-01",
+    "NEG-05"
+   ],
+   "extra": ""
+  },
+  {
+   "id": "SET-06",
+   "name": "Rainy night street",
+   "cat": "world",
+   "desc": "Wet asphalt, neon, night",
+   "ids": [
+    "LOC-01",
+    "LGT-06",
+    "ATM-03",
+    "CLR-03"
+   ],
+   "extra": ""
+  },
+  {
+   "id": "SET-07",
+   "name": "Misty lake",
+   "cat": "world",
+   "desc": "Quiet dawn landscape",
+   "ids": [
+    "LOC-03",
+    "LGT-09",
+    "ATM-01",
+    "CMP-07"
+   ],
+   "extra": ""
+  },
+  {
+   "id": "SET-08",
+   "name": "Keep identity",
+   "cat": "edit",
+   "desc": "Change the image, keep the person",
+   "ids": [
+    "NEG-02",
+    "NEG-08",
+    "ANI-05"
+   ],
+   "extra": ""
+  }
+ ]
+}
