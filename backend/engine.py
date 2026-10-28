@@ -16,6 +16,7 @@ import os
 import threading
 import time
 from collections import OrderedDict
+from pathlib import Path
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Callable, Iterator
@@ -27,6 +28,7 @@ import torch.nn.functional as F
 from PIL import Image, ImageOps
 
 from . import fastattn
+from . import qwen21
 from .config import DATA, get_settings
 
 GB = 2**30
@@ -58,6 +60,12 @@ def capabilities(e: dict) -> dict | None:
                 "cfg": {"min": 1.0, "max": 10.0, "step": 0.5, "default": 4.0}, "negative_prompt": False,
                 "denoise": {"min": 0.1, "max": 1.0, "step": 0.05, "default": 0.85, "modes": ["inpaint"]},
                 "sampler": None, "scheduler": None, "max_batch": 4, "max_refs": 4, "resolution": res, "lora": True}
+    if fam == "qwen-image-21":
+        # bez inpaintingu (pipeline Diffusers go nie ma); obrazy wejściowe widzi koder Qwen3-VL i VAE; domyślnie 12 kroków, bez CFG
+        r32 = {**res, "multiple": 32}
+        return {"modes": ["t2i", "edit", "multi"], "steps": {"min": 1, "max": 40, "default": 12}, "cfg": None,
+                "negative_prompt": False, "denoise": None, "sampler": None, "scheduler": None, "max_batch": 4, "max_refs": 3,
+                "resolution": r32, "lora": True}
     if fam == "z-image":
         turbo = e.get("turbo", True)
         return {"modes": ["t2i", "edit", "inpaint"], "steps": {"min": 1, "max": 20 if turbo else 60, "default": 8 if turbo else 28},
@@ -72,6 +80,9 @@ def model_notes(e: dict) -> str | None:
     if e["family"] == "flux2-klein":
         return ("Destylowany: 4 kroki, CFG nieaktywne. Edycja i multi-reference przez obrazy referencyjne."
                 if e.get("is_distilled", True) else "Wariant bazowy: więcej kroków i aktywne CFG.")
+    if e["family"] == "qwen-image-21":
+        return (f"GGUF {e.get('quant', '')}: transformer i koder Qwen3-VL skwantyzowane, obliczenia w fp32. Bez CFG, domyślnie 12 kroków. "
+                "Edycja i referencje przez obrazy wejściowe (do 3 + obraz do edycji), bez inpaintingu.")
     if e["family"] == "z-image":
         return "Turbo: ok. 8 kroków, CFG nieaktywne (guidance = 0)." if e.get("turbo", True) else "Wariant bazowy: CFG i negatywny prompt aktywne."
     return None
@@ -217,6 +228,7 @@ class Engine:
         self.dtype = torch.float16               # dtype transformera (embeddingi są do niego rzutowane)
         self.safe_ids: set[str] = set(self._read_safe_ids())   # modele, w których fp16 daje NaN/czarny obraz → tryb fp32-compute
         self._vae_time = 0.0
+        self._encode_time = 0.0                  # czas kodowania promptu wewnątrz pipeline'u (Qwen koduje przy każdym wywołaniu)
 
     # ----- stan -----
     @property
@@ -269,6 +281,8 @@ class Engine:
                 say = on_msg or (lambda m: None)
                 say(f"Ładowanie modelu {entry['name']}…")
                 self.dtype = self._dtype_map(entry["id"])["default"]
+                if entry["family"] == "qwen-image-21":
+                    self.dtype = torch.float32           # Qwen Image 2.1 przepełnia fp16, a bf16 jest na RDNA2 wolniejsze od fp32
                 base_entry = entry
                 if entry["kind"] == "checkpoint":
                     from .registry import registry
@@ -276,7 +290,7 @@ class Engine:
                 self._loading_entry_id = entry["id"]
                 try:
                     pipe = self._from_pretrained(base_entry)
-                except (ValueError, OSError) as ex:      # zdarzają się przejściowe błędy odczytu plików modelu (JSONDecodeError)
+                except (ValueError, OSError, TypeError) as ex:      # zdarzają się przejściowe błędy odczytu plików modelu (JSONDecodeError, gguf)
                     print(f"[engine] ładowanie nieudane ({ex}); ponawiam raz", flush=True)
                     gc.collect(); time.sleep(1.5)
                     pipe = self._from_pretrained(base_entry)
@@ -287,7 +301,7 @@ class Engine:
                     pipe.register_modules(transformer=tr)
                 say("Przenoszenie na GPU…")
                 self._place(pipe)
-                if entry["id"] in self.safe_ids and get_settings().precision != "bf16":
+                if entry["id"] in self.safe_ids and get_settings().precision != "bf16" and entry["family"] != "qwen-image-21":
                     say("Tryb bezpieczny: obliczenia w fp32 (model przepełnia fp16)…")
                     to_fp32_compute(pipe.transformer)
                     pipe.vae.to(torch.float32)           # dekoder VAE też przepełnia fp16 (Z-Image) — fp32 jest szybki i tani
@@ -314,6 +328,11 @@ class Engine:
             from diffusers import Flux2KleinPipeline as P
         elif e["family"] == "z-image":
             from diffusers import ZImagePipeline as P
+        elif e["family"] == "qwen-image-21":
+            paths = qwen21.find_bundle(Path(e["path"]))
+            if not paths:
+                raise RuntimeError("Brak plików modelu Qwen Image 2.1 (model/, text_encoder/, mmproj/, vae/).")
+            return qwen21.build_pipeline(paths, DATA, torch.float32)
         else:
             raise RuntimeError(f"Nieobsługiwana rodzina modelu: {e['family']}")
         return P.from_pretrained(e["path"], torch_dtype=self._dtype_map(self._loading_entry_id), low_cpu_mem_usage=True)
@@ -324,7 +343,15 @@ class Engine:
         tot = sum(_module_bytes(m) for m in (pipe.transformer, pipe.vae, pipe.text_encoder))
         free = torch.cuda.mem_get_info()[0]
         fits = tot + 2.5 * GB < free
-        if mode == "gpu" or (mode == "auto" and fits):
+        if type(pipe).__name__ == "QwenImage21Pipeline":
+            # transformer (GGUF, ok. 4 GB) i VAE na GPU; koder Qwen3-VL (ok. 6,6 GB) wraca do RAM po każdym kodowaniu promptu
+            self.residency = "text-swap"
+            pipe.transformer.to(DEV)
+            pipe.vae.to(DEV)
+            qwen21.tune_vae(pipe.vae)
+            qwen21.attach_text_swap(pipe, DEV, on_time=self._add_encode_time)
+            self.quantized = True                 # wagi GGUF: LoRA zawsze jako osobna gałąź (bez fuse)
+        elif mode == "gpu" or (mode == "auto" and fits):
             self.residency = "gpu"
             pipe.to(DEV)
         else:
@@ -341,8 +368,9 @@ class Engine:
         # i daje stałe kształty konwolucji niezależnie od rozdzielczości obrazu
         if hasattr(pipe.vae, "enable_tiling"):
             pipe.vae.enable_tiling()
-            pipe.vae.tile_sample_min_size = 512
-            pipe.vae.tile_latent_min_size = 512 // 8
+            if not type(pipe).__name__ == "QwenImage21Pipeline":
+                pipe.vae.tile_sample_min_size = 512
+                pipe.vae.tile_latent_min_size = 512 // 8
         orig = pipe.vae.decode
         eng = self
 
@@ -360,8 +388,13 @@ class Engine:
         pipe.__class__ = type(pipe.__class__.__name__, (pipe.__class__,), {"_execution_device": property(lambda s: DEV)})
         return pipe
 
+    def _add_encode_time(self, dt: float) -> None:
+        self._encode_time += dt
+
     def _pipe(self, mode: str):
         fam = self.entry["family"]
+        if fam == "qwen-image-21":
+            return self.pipe
         key = {"inpaint": "inpaint", "edit": "img2img" if fam == "z-image" else "base"}.get(mode, "base")
         if key in self.pipes:
             return self.pipes[key]
@@ -417,7 +450,8 @@ class Engine:
             if name is None:
                 name = "a" + hashlib.sha1(l["id"].encode()).hexdigest()[:10]
                 try:
-                    pipe.load_lora_weights(l["path"], adapter_name=name)
+                    src = qwen21.convert_lora(l["path"]) if self.entry["family"] == "qwen-image-21" else l["path"]
+                    pipe.load_lora_weights(src, adapter_name=name)
                 except Exception as ex:
                     raise RuntimeError(f"Nie udało się wczytać LoRA „{l['name']}”: {ex}") from ex
                 self.adapters[l["id"]] = name
@@ -474,7 +508,8 @@ class Engine:
         cfg_on = bool(caps["cfg"]) and cfg is not None and float(cfg) > 1.0
         self._apply_loras(loras)
         pipe = self._pipe(mode)
-        emb = self._encode(req["prompt"], req.get("negative_prompt") or "", cfg_on, tm)
+        qwen = e["family"] == "qwen-image-21"
+        emb = None if qwen else self._encode(req["prompt"], req.get("negative_prompt") or "", cfg_on, tm)
         tm.sample_ram()
 
         if source is not None and mode in ("edit", "inpaint"):
@@ -493,7 +528,19 @@ class Engine:
                 return kw
 
             kw = dict(height=h, width=w, num_inference_steps=steps, generator=gen, callback_on_step_end=cb)
-            if e["family"] == "flux2-klein":
+            if qwen:
+                # prompt i obrazy koduje sam pipeline (koder Qwen3-VL widzi obrazy wejściowe razem z tekstem)
+                kw["prompt"] = req["prompt"]
+                kw["output_resolution"] = max(512, int((w * h) ** 0.5) // 32 * 32)
+                if mode in ("edit", "multi"):
+                    ims = ([source.convert("RGB")] if source is not None else []) + [r.convert("RGB") for r in refs]
+                    if not ims:
+                        raise RuntimeError("Tryb edycji wymaga obrazu źródłowego lub referencji.")
+                    kw["image"] = ims
+                    # Pipeline skaluje każdy obraz wejściowy do ok. output_resolution². Klucze i wartości obrazów trafiają do cache KV
+                    # (ok. 1 GB na każde 1000 tokenów w fp32), więc budżet tokenów dzielimy między obrazy wejściowe.
+                    kw["output_resolution"] = max(384, int(kw["output_resolution"] / len(ims) ** 0.5) // 32 * 32)
+            elif e["family"] == "flux2-klein":
                 kw["prompt_embeds"] = _emb.to(DEV, self.dtype)
                 kw["guidance_scale"] = float(cfg) if cfg_on else 1.0
                 if mode in ("edit", "multi"):
@@ -521,7 +568,10 @@ class Engine:
                 self._vae_time = 0.0
                 try:
                     with torch.no_grad():
-                        return pipe_(**kw).images[0]
+                        self._encode_time = 0.0
+                        img = pipe_(**kw).images[0]
+                        tm.t["encode"] += self._encode_time
+                        return img
                 except torch.OutOfMemoryError as ex:
                     gc.collect(); torch.cuda.empty_cache()          # zwolnij bufory podręczne i spróbuj raz jeszcze
                     if attempt == 2:
@@ -533,7 +583,7 @@ class Engine:
             _sync()
             t_call = time.perf_counter()
             img = call(pipe, build(idx, seed, state, emb))
-            if self.dtype == torch.float16 and _degenerate(img):
+            if self.dtype == torch.float16 and not qwen and _degenerate(img):
                 # fp16 dał NaN/czarny obraz → przełącz model na tryb fp32-compute (wolniej, ale poprawnie) i powtórz
                 print("[engine] fp16 dał zdegenerowany obraz — przeładowanie w trybie bezpiecznym (fp32-compute)", flush=True)
                 entry = self.entry

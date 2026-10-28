@@ -28,7 +28,7 @@ interface Capabilities {
 interface ModelInfo {
   id: string;                     // stabilny, np. "flux2-klein-4b" albo "ckpt:<hash>"
   name: string;
-  family: "flux2-klein" | "z-image" | "qwen-image" | "unknown";
+  family: "flux2-klein" | "z-image" | "qwen-image" | "qwen-image-21" | "unknown";   // qwen-image-21: folder GGUF (model/, text_encoder/, mmproj/, vae/)
   kind: "base" | "checkpoint";    // checkpoint = alternatywny pełny fine-tune tej samej rodziny
   path: string;
   size_bytes: number;

@@ -73,11 +73,17 @@ Where things live is configurable, so the code can also run against any data fol
 |---|---|---|
 | FLUX.2 klein 4B | text to image, edit, multi-reference (up to 4), inpainting, LoRA | distilled: 4 steps, CFG inactive |
 | Z-Image Turbo | text to image, img2img (denoise), inpainting, LoRA | 8 steps |
+| Qwen Image 2.1 (GGUF) | text to image, edit and multi-reference through input images (up to 3 + the edited one), LoRA | no inpainting, no CFG, 12 steps by default; fp32 compute |
 
-Install models from the UI (Settings, Models) or copy a Diffusers-layout folder into the models directory. Extra folders
+**Qwen Image 2.1** is read from a folder with four sub-folders: `model/` (transformer `.gguf`), `text_encoder/` (Qwen3-VL `.gguf`),
+`mmproj/` (Qwen3-VL vision projector `.gguf`) and `vae/` (`.safetensors`). The transformer and the text encoder stay quantized on
+the GPU/RAM (about 4 GB and 6.6 GB); the text encoder is moved to the GPU only while a prompt is encoded. DoRA LoRAs are not
+supported by Diffusers and are listed as incompatible. The `gguf` package is required (`backend/requirements.txt`).
+
+Install models from the UI (Settings, Models) or copy a Diffusers-layout folder (or a Qwen GGUF folder, see above) into the models directory. Extra folders
 (including `ComfyUI/models/...`) can be added in Settings. Stand-alone transformer checkpoints of the same family are detected
 as alternative models and loaded on top of the installed base model (text encoder and VAE). Files in other architectures are
-listed as unsupported with the reason, without loading them.
+listed as unsupported with the reason, without loading them. Bare text-encoder files are ignored.
 
 ## GPU notes (RDNA2 / ROCm)
 

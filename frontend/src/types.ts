@@ -1,7 +1,7 @@
 // Typy zgodne z API.md (źródło prawdy: kontrakt backendu).
 
 export type Mode = "t2i" | "edit" | "multi" | "inpaint";
-export type Family = "flux2-klein" | "z-image" | "qwen-image" | "unknown";
+export type Family = "flux2-klein" | "z-image" | "qwen-image" | "qwen-image-21" | "unknown";
 
 export interface Capabilities {
   modes: Mode[];

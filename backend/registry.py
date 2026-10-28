@@ -8,6 +8,7 @@ import struct
 import threading
 from pathlib import Path
 
+from . import qwen21
 from .config import get_settings
 
 CLASS_FAMILY = {"Flux2KleinPipeline": "flux2-klein", "Flux2KleinKVPipeline": "flux2-klein",
@@ -17,10 +18,8 @@ SKIP_DIRS = {"vae", "text_encoders", "text_encoder", "clip", "clip_vision", "con
 MIN_MODEL_BYTES = int(1.5 * 2**30)
 MAX_LORA_BYTES = 4 * 2**30
 
-QWEN_REASON = ("Pliki w formacie ComfyUI (Qwen Image 2.1): inna architektura niż QwenImageTransformer2DModel z Diffusers "
-               "— {blocks} bloków jednostrumieniowych o wymiarze {dim} (tensory txt_in.in_layer, modulation.1, img_mlp.gate_up) "
-               "zamiast 60 bloków dwustrumieniowych o wymiarze 3072, a koder tekstu to Qwen3-VL-8B. Zgodność z backendem "
-               "Diffusers nie została potwierdzona, więc model jest tylko wykryty (bez ładowania).")
+QWEN_REASON = ("Pojedynczy plik Qwen Image 2.1 ({blocks} bloków, wymiar {dim}) bez kwantyzacji nie mieści się w VRAM razem z koderem tekstu. "
+               "Użyj wersji GGUF: foldery model/, text_encoder/, mmproj/ i vae/ obok siebie.")
 
 
 def read_header(path: Path) -> dict:
@@ -53,6 +52,8 @@ def sniff_transformer(h: dict) -> dict:
     """Rozpoznaj rodzinę po nazwach i kształtach tensorów pliku z samym transformerem."""
     keys = [k for k in h if k != "__metadata__"]
     blob = " ".join(keys[:4000])
+    if "model.embed_tokens.weight" in h or any(k.startswith(("model.layers.", "model.language_model.")) for k in keys[:50]):
+        return {"family": "text-encoder", "variant": "", "hidden": 0}        # sam koder tekstu (LLM), nie model obrazu
     if "double_stream_modulation" in blob or ("double_blocks" in blob and "single_blocks" in blob and "img_in.weight" in h
                                                and h["img_in.weight"]["shape"][0] in (3072, 4096, 6144) and _max_idx(keys, r"double_blocks\.(\d+)\.") < 9):
         hid = h.get("img_in.weight", {}).get("shape", [0])[0]
@@ -83,6 +84,17 @@ def _scan_model_dir(root: Path, out: list[dict]) -> None:
         return
 
     def walk(d: Path, depth: int):
+        bundle = qwen21.find_bundle(d)
+        if bundle:                              # Qwen Image 2.1 w GGUF: transformer + koder Qwen3-VL + mmproj + VAE
+            size = sum(f.stat().st_size for f in bundle.values())
+            partial = any(d.rglob("*.part")) or any(d.rglob("*.incomplete"))
+            e = {"id": slug(d.name) or _hash(d), "name": d.name, "family": "qwen-image-21", "kind": "base", "path": str(d),
+                 "format": "gguf", "size_bytes": size, "status": "ready", "unsupported_reason": None, "hidden": 4096,
+                 "quant": qwen21.bundle_label(bundle), "license": None}
+            if partial:
+                e["status"], e["unsupported_reason"] = "unsupported", "Niekompletny folder modelu — dokończ pobieranie."
+            out.append(e)
+            return
         mi = d / "model_index.json"
         if mi.exists():
             try:
@@ -129,6 +141,8 @@ def _scan_model_dir(root: Path, out: list[dict]) -> None:
                                 "format": "single-file", "size_bytes": size, "status": "unsupported",
                                 "unsupported_reason": f"Nie udało się odczytać nagłówka: {ex}", "license": None})
                     continue
+                if sn["family"] == "text-encoder":
+                    continue
                 e = {"id": f"ckpt-{slug(c.stem)[:40]}-{_hash(c)[:4]}", "name": c.stem, "family": sn["family"], "kind": "checkpoint",
                      "path": str(c), "format": "single-file", "size_bytes": size, "status": "ready", "unsupported_reason": None,
                      "hidden": sn.get("hidden", 0), "variant": sn.get("variant", ""), "license": None}
@@ -156,6 +170,8 @@ def sniff_lora(path: Path) -> dict:
                 return h[k]["shape"][1]
         return 0
 
+    if "img_mlp.gate_up" in blob or "img_mlp.gate_layer" in blob:        # Qwen Image 2.1 (SwiGLU zamiast GELU z Qwen-Image 1)
+        return {"family": "qwen-image-21", "detail": "transformer_blocks, SwiGLU", "dora": "dora_scale" in blob}
     if "qwen" in base_hint:
         return {"family": "qwen-image", "detail": base_hint}
     if "noise_refiner" in blob or "context_refiner" in blob or "adaLN_modulation" in blob or "feed_forward.w1" in blob:
@@ -231,19 +247,24 @@ class Registry:
                                   "default_strength": 1.0})
                     continue
                 loras.append({"id": f"lora:{_hash(f)}", "name": f.stem, "path": str(f), "size_bytes": size, "family": sn["family"],
-                              "detail": sn.get("detail", ""), "hidden": sn.get("hidden", 0), "default_strength": 1.0})
+                              "detail": sn.get("detail", ""), "hidden": sn.get("hidden", 0), "default_strength": 1.0,
+                              "dora": bool(sn.get("dora"))})
         for l in loras:
             if "status" in l:
                 continue
             compat = [m["id"] for m in models if m["status"] == "ready" and m["family"] == l["family"]
                       and (l["family"] != "flux2-klein" or not l.get("hidden") or not m.get("hidden") or l["hidden"] == m["hidden"])]
             l["compatible_model_ids"] = compat
-            if compat:
+            if compat and l.get("dora"):
+                l["compatible_model_ids"] = []
+                l["status"] = "incompatible"
+                l["reason"] = "LoRA typu DoRA (dora_scale) — Diffusers nie obsługuje DoRA, więc wynik byłby przekłamany."
+            elif compat:
                 l["status"], l["reason"] = "ready", None
             elif l["family"] in ("unknown",):
                 l["status"], l["reason"] = "unknown", "Nie rozpoznano architektury LoRA."
             else:
-                names = {"qwen-image": "Qwen Image", "flux1-or-dev": "FLUX.1 / FLUX.2 dev", "flux2-klein": "FLUX.2 Klein", "z-image": "Z-Image"}
+                names = {"qwen-image": "Qwen Image", "qwen-image-21": "Qwen Image 2.1", "flux1-or-dev": "FLUX.1 / FLUX.2 dev", "flux2-klein": "FLUX.2 Klein", "z-image": "Z-Image"}
                 l["status"] = "incompatible"
                 l["reason"] = f"LoRA do architektury {names.get(l['family'], l['family'])} — brak zgodnego, zainstalowanego modelu."
         with self._lock:

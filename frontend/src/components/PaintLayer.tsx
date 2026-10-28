@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef } from "react";
 import { Brush, Check, Eraser, FlipHorizontal2, Minus, Redo2, Trash2, Undo2, Wand2 } from "lucide-react";
 import { useT } from "../i18n";
 import { DOODLE_COLORS, LayerCanvas, bitmapSize, type Stroke } from "../paint";
-import { useStore, type Attachment } from "../store";
+import { selCaps, useStore, type Attachment } from "../store";
 
 const minDist = 0.5;     // mniejsze od pół piksela bitmapy ruchy nie dodają punktów
 
@@ -126,6 +126,7 @@ export function PaintBar({ att }: { att: Attachment }) {
   const doc = att.paint;
   const mask = ui.paintLayer === "mask";
   const colorInput = useRef<HTMLInputElement>(null);
+  const noInpaint = !useStore(selCaps)?.modes.includes("inpaint");
 
   if (ui.paintBarMin) {
     return (
@@ -176,7 +177,7 @@ export function PaintBar({ att }: { att: Attachment }) {
         <button className="btn small ghost" title={t("paint.minimize")} aria-label={t("paint.minimize")} onClick={() => setUi({ paintBarMin: true })}><Minus size={14} /></button>
       </div>
       <div className="pb-hint">
-        {mask ? (att.role === "edit" ? t("paint.maskHint") : t("paint.maskNotEdit")) : t("paint.doodleHint")}
+        {mask ? (noInpaint ? t("paint.noInpaint") : att.role === "edit" ? t("paint.maskHint") : t("paint.maskNotEdit")) : t("paint.doodleHint")}
       </div>
     </div>
   );

@@ -12,3 +12,4 @@ requests
 psutil
 pillow
 huggingface_hub
+gguf                 # Qwen Image 2.1 w GGUF (transformer i koder tekstu)

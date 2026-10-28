@@ -461,6 +461,7 @@ const rows: Row[] = [
   ["menu.pasteHint", "Use Ctrl+V to paste", "Użyj Ctrl+V, aby wkleić", "Mit Strg+V einfügen", "Utilisez Ctrl+V pour coller", "Usa Ctrl+V para pegar"],
   ["menu.selectAll", "Select all", "Zaznacz wszystko", "Alles auswählen", "Tout sélectionner", "Seleccionar todo"],
   ["menu.undo", "Undo", "Cofnij", "Rückgängig", "Annuler", "Deshacer"],
+  ["paint.noInpaint", "This model has no inpainting, so the mask is ignored. Doodles still work.", "Ten model nie ma inpaintingu, więc maska jest ignorowana. Bazgroły nadal działają.", "Dieses Modell hat kein Inpainting, daher wird die Maske ignoriert. Kritzeleien funktionieren weiter.", "Ce modèle n’a pas d’inpainting : le masque est ignoré. Les griffonnages fonctionnent toujours.", "Este modelo no tiene inpainting, así que la máscara se ignora. Los garabatos siguen funcionando."],
 ];
 
 function build(): Record<Lang, Record<string, string>> {
