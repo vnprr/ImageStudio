@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
-import { Check, Copy, Eye, EyeOff, Globe, KeyRound, LogOut, Play, RefreshCw, Square } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import qrcode from "qrcode-generator";
+import { Check, Copy, Eye, EyeOff, Globe, KeyRound, LogOut, Power, RefreshCw, X } from "lucide-react";
 import { api } from "../api";
-import { encodeLink, getConn, isRemote, setConn } from "../connection";
+import { getConn, isRemote, setConn } from "../connection";
 import { useT } from "../i18n";
 import { useStore } from "../store";
 import type { RemoteStatus } from "../types";
-import { Spinner, Switch } from "./ui";
+import { Spinner } from "./ui";
 
 function CopyBtn({ text, label }: { text: string; label?: string }) {
   const t = useT();
@@ -38,79 +39,134 @@ function ClientCard() {
   );
 }
 
-/** Karta „Zdalny dostęp" na komputerze z silnikiem: włącznik, tunel, token i link parowania. */
+function Qr({ text }: { text: string }) {
+  const svg = useMemo(() => {
+    const q = qrcode(0, "M");
+    q.addData(text);
+    q.make();
+    return q.createSvgTag({ cellSize: 3, margin: 2, scalable: true });
+  }, [text]);
+  return <div className="qr" role="img" aria-label="QR" dangerouslySetInnerHTML={{ __html: svg }} />;
+}
+
+function Step({ state, label, detail }: { state: "wait" | "run" | "ok" | "err"; label: string; detail?: string }) {
+  return (
+    <div className={"rstep " + state}>
+      <span className="rstep-ico">{state === "ok" ? <Check size={13} /> : state === "run" ? <Spinner size={13} /> : state === "err" ? <X size={13} /> : <i />}</span>
+      <span className="rstep-label">{label}</span>
+      {detail && <small>{detail}</small>}
+    </div>
+  );
+}
+
+/** Karta „Zdalny dostęp" na komputerze z silnikiem: jeden przycisk włącza wszystko (instalacja tunelu, tunel, rejestracja adresu). */
 function EngineCard() {
   const t = useT();
   const toast = useStore((s) => s.toast);
   const [st, setSt] = useState<RemoteStatus | null>(null);
   const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [pub, setPub] = useState<string | null>(null);
   const [web, setWeb] = useState<string | null>(null);
+  const [byp, setByp] = useState<string | null>(null);
 
   const refresh = useCallback(() => api.remoteStatus().then(setSt).catch(() => {}), []);
   useEffect(() => {
     void refresh();
-    const id = window.setInterval(refresh, 3000);
+    const id = window.setInterval(refresh, 1500);
     return () => window.clearInterval(id);
   }, [refresh]);
 
   if (!st) return <div className="card"><Spinner /> {t("loading")}</div>;
-  const act = async (p: Promise<RemoteStatus>) => { try { setSt(await p); } catch (e) { toast("error", (e as Error).message); } };
-  const base = st.effective_url;
-  const link = base ? `${(st.web_ui_url || base)}/#connect=${encodeLink(base, st.token)}` : "";
-  const ts = st.tunnel.state;
+  const act = async (p: Promise<RemoteStatus>) => { setBusy(true); try { setSt(await p); } catch (e) { toast("error", (e as Error).message); } setBusy(false); };
+  const inst = st.install, tun = st.tunnel, reg = st.registry;
+  const online = st.enabled && !!st.effective_url;
+  const waiting = st.enabled && (st.tunnel_mode === "auto" || !!st.public_url);
+  const needReg = reg.configured && !st.public_url;
+  const installing = inst.state === "downloading" || inst.state === "verifying";
+  const pct = Math.round(inst.progress * 100);
 
   return (
-    <div className="card">
-      <h3><Globe size={15} /> {t("remote.title")}</h3>
-      <p className="note small">{t("remote.hint")}</p>
-      <Switch checked={st.enabled} onChange={(v) => void act(api.remoteUpdate({ enabled: v, ...(v ? { tunnel: "auto" as const } : {}) }))} label={t("remote.enable")} hint={st.engine_env ? t("remote.engineEnv") : t("remote.enableHint")} />
+    <div className={"card remote-card " + (online ? "online" : "")}>
+      <div className="remote-head">
+        <span className="remote-globe"><Globe size={20} /></span>
+        <div>
+          <h3>{t("remote.title")}</h3>
+          <p className="note small">{t("remote.hint")}</p>
+        </div>
+        <span className={"tpill " + (online ? "up" : waiting ? "starting" : "off")}>{online ? t("remote.state.online") : waiting ? t("remote.state.starting") : t("remote.state.off")}</span>
+      </div>
 
-      {st.enabled && (
+      {!st.enabled || (st.tunnel_mode !== "auto" && !st.public_url) ? (
         <>
-          <div className="remote-row">
-            <span className="label">{t("remote.tunnel")}</span>
-            <span className={"tpill " + ts}>{t(`remote.tunnel.${ts}`)}</span>
-            {ts === "up" || ts === "starting"
-              ? <button className="btn small" onClick={() => void act(api.remoteTunnel("stop"))}><Square size={12} /> {t("remote.stop")}</button>
-              : <button className="btn small" disabled={!st.tunnel.installed} onClick={() => void act(api.remoteTunnel("start"))}><Play size={12} /> {t("remote.start")}</button>}
+          <button className="btn amber big" disabled={busy} onClick={() => void act(api.remoteEnable(true))}><Power size={17} /> {t("remote.turnOn")}</button>
+          <ul className="remote-bullets">
+            <li>{t("remote.b1")}</li><li>{t("remote.b2")}</li><li>{t("remote.b3")}</li>
+          </ul>
+        </>
+      ) : (
+        <>
+          <div className="rsteps">
+            <Step state={tun.installed ? "ok" : inst.state === "error" ? "err" : "run"} label={t("remote.step.install")}
+              detail={installing ? `${inst.state === "verifying" ? t("remote.step.verifying") : pct + "%"}` : tun.installed ? undefined : inst.error || undefined} />
+            <Step state={tun.state === "up" ? "ok" : tun.state === "error" ? "err" : tun.installed ? "run" : "wait"} label={t("remote.step.tunnel")} detail={tun.state === "error" ? tun.error : undefined} />
+            {needReg && <Step state={reg.state === "ok" ? "ok" : reg.state === "error" ? "err" : tun.state === "up" ? "run" : "wait"} label={t("remote.step.register")} detail={reg.state === "error" ? reg.error : undefined} />}
           </div>
-          {!st.tunnel.installed && (
-            <div className="warn small">
-              {t("remote.install")} <code>winget install Cloudflare.cloudflared</code> <CopyBtn text="winget install Cloudflare.cloudflared" />
+          {installing && <div className="loadingtrack wide"><div style={{ width: `${pct}%` }} /></div>}
+          {(inst.state === "error" || tun.state === "error") && (
+            <button className="btn small" onClick={() => void act(api.remoteTunnel("start"))}><RefreshCw size={13} /> {t("retry")}</button>
+          )}
+
+          {online && st.link && (
+            <div className="remote-online">
+              <Qr text={st.link} />
+              <div className="remote-online-side">
+                <b>{t("remote.ready")}</b>
+                <p className="note small">{st.link_stable ? t("remote.stable") : st.web_ui_url ? t("remote.unstable") : t("remote.viaEngine")}</p>
+                <div className="row-gap">
+                  <CopyBtn text={st.link} label={t("remote.copyLink")} />
+                  <button className="btn small ghost" onClick={() => void act(api.remoteEnable(false))}><Power size={13} /> {t("remote.turnOff")}</button>
+                </div>
+                <small className="muted trunc">{st.effective_url}</small>
+              </div>
             </div>
           )}
-          {ts === "error" && <div className="warn small">{st.tunnel.error}</div>}
-          {st.tunnel.url && <div className="remote-row"><code className="trunc">{st.tunnel.url}</code><CopyBtn text={st.tunnel.url} /></div>}
-
-          <div className="pair spaced">
-            <div>
-              <span className="label">{t("remote.publicUrl")}</span>
-              <input type="text" spellCheck={false} placeholder="https://…" value={pub ?? st.public_url} onChange={(e) => setPub(e.target.value)} onBlur={() => pub !== null && void act(api.remoteUpdate({ public_url: pub })).then(() => setPub(null))} />
-              <p className="note small">{t("remote.publicUrlHint")}</p>
+          {!online && (
+            <div className="row-gap">
+              <button className="btn small ghost" onClick={() => void act(api.remoteEnable(false))}><Power size={13} /> {t("remote.turnOff")}</button>
             </div>
-            <div>
-              <span className="label">{t("remote.webUrl")}</span>
-              <input type="text" spellCheck={false} placeholder="https://moje-studio.vercel.app" value={web ?? st.web_ui_url} onChange={(e) => setWeb(e.target.value)} onBlur={() => web !== null && void act(api.remoteUpdate({ web_ui_url: web })).then(() => setWeb(null))} />
-              <p className="note small">{t("remote.webUrlHint")}</p>
-            </div>
-          </div>
-
-          <div className="remote-row spaced">
-            <span className="label"><KeyRound size={13} /> {t("remote.token")}</span>
-            <code className="trunc">{show ? st.token : "•".repeat(24)}</code>
-            <button className="icon-btn" aria-label={show ? t("remote.hide") : t("remote.show")} onClick={() => setShow(!show)}>{show ? <EyeOff size={13} /> : <Eye size={13} />}</button>
-            <CopyBtn text={st.token} />
-            <button className="btn small danger" title={t("remote.rotateHint")} onClick={() => { if (window.confirm(t("remote.rotateConfirm"))) void act(api.remoteRotate()); }}><RefreshCw size={12} /> {t("remote.rotate")}</button>
-          </div>
-
-          <div className="remote-row spaced">
-            <span className="label">{t("remote.link")}</span>
-            {link ? <><code className="trunc">{link.replace(/#connect=.*/, "#connect=…")}</code><CopyBtn text={link} label={t("remote.copyLink")} /></> : <span className="muted small">{t("remote.noLink")}</span>}
-          </div>
-          <div className="warn small">{t("remote.security")}</div>
+          )}
         </>
       )}
+
+      <details className="remote-adv">
+        <summary>{t("remote.advanced")}</summary>
+        <div className="remote-row">
+          <span className="label"><KeyRound size={13} /> {t("remote.token")}</span>
+          <code className="trunc">{show ? st.token : "•".repeat(24)}</code>
+          <button className="icon-btn" aria-label={show ? t("remote.hide") : t("remote.show")} onClick={() => setShow(!show)}>{show ? <EyeOff size={13} /> : <Eye size={13} />}</button>
+          <CopyBtn text={st.token} />
+          <button className="btn small danger" title={t("remote.rotateHint")} onClick={() => { if (window.confirm(t("remote.rotateConfirm"))) void act(api.remoteRotate()); }}><RefreshCw size={12} /> {t("remote.rotate")}</button>
+        </div>
+        <div className="pair spaced">
+          <div>
+            <span className="label">{t("remote.webUrl")}</span>
+            <input type="text" spellCheck={false} placeholder="https://moje-studio.vercel.app" value={web ?? st.web_ui_url} onChange={(e) => setWeb(e.target.value)} onBlur={() => web !== null && void act(api.remoteUpdate({ web_ui_url: web })).then(() => setWeb(null))} />
+            <p className="note small">{t("remote.webUrlHint")}</p>
+          </div>
+          <div>
+            <span className="label">{t("remote.bypass")}</span>
+            <input type="password" autoComplete="off" spellCheck={false} placeholder="••••••••" value={byp ?? (reg.protected ? "••••••••••••" : "")} onFocus={() => byp === null && setByp("")} onChange={(e) => setByp(e.target.value)} onBlur={() => byp && void act(api.remoteUpdate({ rv_bypass: byp })).then(() => setByp(null))} />
+            <p className="note small">{t("remote.bypassHint")}</p>
+          </div>
+        </div>
+        <div>
+          <span className="label">{t("remote.publicUrl")}</span>
+          <input type="text" spellCheck={false} placeholder="https://…" value={pub ?? st.public_url} onChange={(e) => setPub(e.target.value)} onBlur={() => pub !== null && void act(api.remoteUpdate({ public_url: pub })).then(() => setPub(null))} />
+          <p className="note small">{t("remote.publicUrlHint")}</p>
+        </div>
+        <div className="warn small">{t("remote.security")}</div>
+      </details>
     </div>
   );
 }

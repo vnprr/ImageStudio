@@ -14,6 +14,7 @@ Model bezpieczeństwa:
 from __future__ import annotations
 
 import asyncio
+import base64
 import glob
 import hashlib
 import hmac
@@ -24,7 +25,9 @@ import secrets
 import shutil
 import subprocess
 import threading
+import time
 import urllib.parse
+import urllib.request
 from pathlib import Path
 
 from .config import DATA, PORT
@@ -53,10 +56,17 @@ _MEDIA_RX = re.compile(r"/api/(events|images/[^/]+/(file|thumb|preview|download)
 
 _lock = threading.Lock()
 _state: dict | None = None
+_KEYS = ("enabled", "token", "public_url", "web_ui_url", "tunnel", "rv_secret", "rv_bypass")
 
 
 def _defaults() -> dict:
-    return {"enabled": False, "token": secrets.token_urlsafe(24), "public_url": "", "web_ui_url": "", "tunnel": "off"}
+    return {"enabled": False, "token": secrets.token_urlsafe(24), "public_url": "", "web_ui_url": "", "tunnel": "off",
+            "rv_secret": secrets.token_urlsafe(32), "rv_bypass": ""}
+
+
+def _override() -> dict:
+    # tryb silnika z launchera: zdalny dostęp włączony na czas tej sesji (bez zapisu do pliku)
+    return {"enabled": True, "tunnel": "auto"} if os.environ.get("IMAGE_STUDIO_ENGINE") == "1" else {}
 
 
 def get() -> dict:
@@ -67,16 +77,14 @@ def get() -> dict:
                 _state = {**_defaults(), **json.loads(REMOTE_FILE.read_text("utf-8"))}
             except Exception:
                 _state = _defaults()
-                _save_locked()
-            if os.environ.get("IMAGE_STUDIO_ENGINE") == "1":      # tryb silnika z launchera: włączony, z tunelem
-                _state = {**_state, "enabled": True, "tunnel": "auto"}
-        return dict(_state)
+            _save_locked()
+        return {**_state, **_override()}
 
 
 def _save_locked() -> None:
     assert _state is not None
     DATA.mkdir(parents=True, exist_ok=True)
-    REMOTE_FILE.write_text(json.dumps({k: _state[k] for k in ("enabled", "token", "public_url", "web_ui_url", "tunnel")}, indent=2), "utf-8")
+    REMOTE_FILE.write_text(json.dumps({k: _state[k] for k in _KEYS}, indent=2), "utf-8")
 
 
 def update(**kw) -> dict:
@@ -84,10 +92,10 @@ def update(**kw) -> dict:
     with _lock:
         assert _state is not None
         for k, v in kw.items():
-            if k in ("enabled", "public_url", "web_ui_url", "tunnel") and v is not None:
+            if k in ("enabled", "public_url", "web_ui_url", "tunnel", "rv_bypass") and v is not None:
                 _state[k] = v
         _save_locked()
-        return dict(_state)
+        return {**_state, **_override()}
 
 
 def rotate_token() -> dict:
@@ -96,7 +104,7 @@ def rotate_token() -> dict:
         assert _state is not None
         _state["token"] = secrets.token_urlsafe(24)
         _save_locked()
-        return dict(_state)
+        return {**_state, **_override()}
 
 
 def media_token(token: str) -> str:
@@ -198,6 +206,83 @@ class RemoteGate:
         await send({"type": "http.response.body", "body": b""})
 
 
+# ───────────────────────── instalacja cloudflared (jednym kliknięciem) ─────────────────────────
+
+RELEASE_API = "https://api.github.com/repos/cloudflare/cloudflared/releases/latest"
+ASSET = "cloudflared-windows-amd64.exe"
+_UA = {"User-Agent": "image-studio-remote"}
+
+
+class Installer:
+    """Pobiera oficjalny cloudflared z GitHuba do data/bin. Plik jest uruchamiany dopiero po weryfikacji: skrót SHA-256 z API wydania
+    (niezależne źródło od samego pliku) albo ważny podpis Authenticode wystawiony dla Cloudflare."""
+
+    def __init__(self) -> None:
+        self.state = "idle"          # idle | downloading | verifying | done | error
+        self.progress = 0.0
+        self.error = ""
+        self._lock = threading.Lock()
+
+    def run(self) -> bool:
+        with self._lock:
+            if find_cloudflared():
+                self.state = "done"
+                return True
+            if os.name != "nt":
+                self.state, self.error = "error", "Automatyczna instalacja tunelu działa tylko w Windows."
+                return False
+            self.state, self.progress, self.error = "downloading", 0.0, ""
+            dest = DATA / "bin" / "cloudflared.exe"
+            part = dest.with_suffix(".part")
+            try:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                rel = json.loads(urllib.request.urlopen(urllib.request.Request(RELEASE_API, headers=_UA), timeout=20).read())
+                asset = next(a for a in rel["assets"] if a["name"] == ASSET)
+                url = asset["browser_download_url"]
+                if not url.startswith("https://github.com/cloudflare/cloudflared/"):
+                    raise RuntimeError("Nieoczekiwany adres pobierania.")
+                sha = hashlib.sha256()
+                with urllib.request.urlopen(urllib.request.Request(url, headers=_UA), timeout=30) as r, open(part, "wb") as f:
+                    total = int(r.headers.get("Content-Length") or asset.get("size") or 0)
+                    done = 0
+                    while chunk := r.read(1 << 20):
+                        f.write(chunk)
+                        sha.update(chunk)
+                        done += len(chunk)
+                        self.progress = done / total if total else 0.0
+                self.state = "verifying"
+                want = str(asset.get("digest") or "").removeprefix("sha256:").lower()
+                if want:
+                    if sha.hexdigest() != want:
+                        raise RuntimeError("Suma kontrolna pobranego pliku się nie zgadza. Plik odrzucony.")
+                elif not _signed_by_cloudflare(part):
+                    raise RuntimeError("Nie udało się zweryfikować pobranego pliku (brak sumy i podpisu). Plik odrzucony.")
+                os.replace(part, dest)
+                self.state, self.progress = "done", 1.0
+                return True
+            except Exception as ex:
+                part.unlink(missing_ok=True)
+                self.state, self.error = "error", f"Instalacja tunelu nie powiodła się: {ex}"
+                return False
+
+    def info(self) -> dict:
+        return {"state": self.state, "progress": round(self.progress, 3), "error": self.error}
+
+
+def _signed_by_cloudflare(path: Path) -> bool:
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-Command",
+                              f"$s=Get-AuthenticodeSignature -LiteralPath '{path}'; \"$($s.Status)|$($s.SignerCertificate.Subject)\""],
+                             capture_output=True, text=True, timeout=60, creationflags=0x08000000).stdout.strip()
+        status, _, subject = out.partition("|")
+        return status == "Valid" and "cloudflare" in subject.lower()
+    except Exception:
+        return False
+
+
+installer = Installer()
+
+
 # ───────────────────────── tunel ─────────────────────────
 
 _URL_RX = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
@@ -223,6 +308,7 @@ class Tunnel:
         self.state = "off"                  # off | starting | up | error | missing
         self.url = ""
         self.error = ""
+        self.on_up = None                   # wywoływane z nowym adresem
         self._lock = threading.Lock()
 
     def start(self, port: int = PORT) -> None:
@@ -231,7 +317,7 @@ class Tunnel:
                 return
             exe = find_cloudflared()
             if not exe:
-                self.state, self.error, self.url = "missing", "Nie znaleziono cloudflared (winget install Cloudflare.cloudflared).", ""
+                self.state, self.error, self.url = "missing", "Tunel nie jest zainstalowany.", ""
                 return
             self.state, self.error, self.url = "starting", "", ""
             flags = 0x08000000 if os.name == "nt" else 0
@@ -244,8 +330,10 @@ class Tunnel:
         for line in proc.stdout or []:
             tail = (tail + [line.strip()])[-6:]
             m = _URL_RX.search(line)
-            if m and self.proc is proc:
+            if m and self.proc is proc and self.state != "up":
                 self.url, self.state = m.group(0), "up"
+                if self.on_up:
+                    threading.Thread(target=self.on_up, args=(self.url,), daemon=True).start()
         if self.proc is proc and self.state != "off":
             self.state, self.url = "error", ""
             self.error = " | ".join(tail)[-300:] or "Tunel zakończył pracę."
@@ -268,11 +356,108 @@ class Tunnel:
 tunnel = Tunnel()
 
 
+# ───────────────────────── stały adres: rejestracja w usłudze na Vercelu ─────────────────────────
+# Adres tunelu „quick" zmienia się przy każdym starcie. Interfejs web (na Vercelu) ma małą funkcję /api/rv, w której silnik zapisuje
+# swój bieżący adres pod identyfikatorem wyliczonym z tajnego klucza (id = SHA-256(klucz)); zapisać może tylko właściciel klucza.
+# Link połączenia zawiera ten identyfikator, więc działa po każdym restarcie komputera.
+
+class Registry:
+    def __init__(self) -> None:
+        self.state = "off"          # off | ok | error
+        self.error = ""
+        self.at = 0.0
+
+    def rv_id(self) -> str:
+        return hashlib.sha256(get()["rv_secret"].encode()).hexdigest()[:32]
+
+    def register(self, url: str) -> bool:
+        st = get()
+        web = st["web_ui_url"].rstrip("/")
+        if not web or not url:
+            self.state, self.error = "off", ""
+            return False
+        headers = {"Content-Type": "application/json", **_UA}
+        if st["rv_bypass"]:                                   # ochrona wdrożenia (logowanie) przepuszcza tylko to wywołanie silnika
+            headers["x-vercel-protection-bypass"] = st["rv_bypass"]
+        body = json.dumps({"reg": st["rv_secret"], "url": url}).encode()
+        last = ""
+        for delay in (0, 2, 5, 12):
+            time.sleep(delay)
+            try:
+                with urllib.request.urlopen(urllib.request.Request(web + "/api/rv", data=body, headers=headers, method="POST"), timeout=15) as r:
+                    if r.status == 200:
+                        self.state, self.error, self.at = "ok", "", time.time()
+                        return True
+                    last = f"HTTP {r.status}"
+            except Exception as ex:
+                last = str(ex)
+        self.state, self.error = "error", f"Rejestracja adresu w wersji web nie powiodła się: {last}"
+        return False
+
+
+registry = Registry()
+tunnel.on_up = registry.register
+
+
+def connect_link(url: str, token: str) -> tuple[str, bool]:
+    """Link połączenia: z identyfikatorem rejestru (stały), gdy adres jest zarejestrowany, inaczej z gołym adresem tunelu."""
+    st = get()
+    base = st["web_ui_url"].rstrip("/") or url
+    if not base:
+        return "", False
+    stable = bool(st["web_ui_url"] and registry.state == "ok")
+    payload = {"t": token, **({"i": registry.rv_id()} if stable else {}), **({"u": url} if url else {})}
+    code = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).decode().rstrip("=")
+    return f"{base}/#connect={code}", stable
+
+
+# ───────────────────────── włączanie jednym przyciskiem ─────────────────────────
+
+_watch_lock = threading.Lock()
+_watch_on = False
+
+
+def bring_up() -> None:
+    """Instaluje tunel (jeśli trzeba), uruchamia go i pilnuje, żeby działał, dopóki zdalny dostęp jest włączony."""
+    global _watch_on
+
+    def run() -> None:
+        global _watch_on
+        try:
+            while True:
+                st = get()
+                if not st["enabled"] or st["tunnel"] != "auto":
+                    return
+                if not find_cloudflared() and installer.state != "error":
+                    installer.run()
+                if find_cloudflared() and tunnel.state in ("off", "error", "missing"):
+                    tunnel.start(PORT)
+                time.sleep(15)
+        finally:
+            with _watch_lock:
+                _watch_on = False
+
+    with _watch_lock:
+        if _watch_on:
+            return
+        _watch_on = True
+    threading.Thread(target=run, daemon=True).start()
+
+
+def retry_install() -> None:
+    installer.state = "idle"
+    bring_up()
+
+
 def status(include_secret: bool = True) -> dict:
     st = get()
     t = tunnel.info()
+    url = st["public_url"] or t["url"]
     out = {"enabled": st["enabled"], "public_url": st["public_url"], "web_ui_url": st["web_ui_url"], "tunnel_mode": st["tunnel"],
-           "tunnel": t, "effective_url": st["public_url"] or t["url"], "port": PORT, "engine_env": os.environ.get("IMAGE_STUDIO_ENGINE") == "1"}
+           "tunnel": t, "install": installer.info(), "effective_url": url, "port": PORT,
+           "engine_env": os.environ.get("IMAGE_STUDIO_ENGINE") == "1",
+           "registry": {"state": registry.state, "error": registry.error, "configured": bool(st["web_ui_url"]), "protected": bool(st["rv_bypass"])}}
     if include_secret:
         out["token"] = st["token"]
+        out["link"], out["link_stable"] = connect_link(url, st["token"])
     return out

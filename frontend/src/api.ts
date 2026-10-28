@@ -62,7 +62,8 @@ export interface ExportBody { format: SaveFormat; quality?: number; dest_dir: st
 export const api = {
   system: () => call<SystemStats>("/system"),
   remoteStatus: () => call<RemoteStatus>("/remote"),
-  remoteUpdate: (b: Partial<{ enabled: boolean; public_url: string; web_ui_url: string; tunnel: "off" | "auto" }>) => call<RemoteStatus>("/remote", json("PUT", b)),
+  remoteUpdate: (b: Partial<{ enabled: boolean; public_url: string; web_ui_url: string; rv_bypass: string; tunnel: "off" | "auto" }>) => call<RemoteStatus>("/remote", json("PUT", b)),
+  remoteEnable: (enabled: boolean) => call<RemoteStatus>("/remote/enable", json("POST", { enabled })),
   remoteRotate: () => call<RemoteStatus>("/remote/rotate", { method: "POST" }),
   remoteTunnel: (action: "start" | "stop") => call<RemoteStatus>("/remote/tunnel", json("POST", { action })),
   settings: () => call<Settings>("/settings"),

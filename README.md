@@ -56,16 +56,21 @@ phone / laptop browser ──HTTPS──► web UI (static build, Vercel)
         └──────────HTTPS + token──► tunnel (cloudflared) ──► your PC: Image Studio engine ──► GPU
 ```
 
-**1. On the PC (engine).** Install a tunnel once: `winget install Cloudflare.cloudflared`. Then either open
-*Settings → Remote access* and switch it on, or start the windowless engine with `run.bat engine` (or the
-"Image Studio Engine" shortcut from `tools/make_shortcut.py`). The tunnel gets a random `https://….trycloudflare.com` address;
-the settings page (or the engine window) shows it with an access token and a **connect link**. Any other HTTPS route to
-port 8765 works too (your own tunnel, Tailscale Serve, reverse proxy): enter it as "own public address".
+**1. On the PC (engine): one button.** Open *Settings → Remote access* and press **Turn on remote access**. The app downloads the
+official `cloudflared` tunnel program once (about 55 MB, checked against the SHA-256 from the GitHub release, never run before the check),
+starts the tunnel, and shows a **link and QR code**. No command line is involved, and the tunnel is restarted automatically
+whenever remote access is on. `run.bat engine` (or the "Image Studio Engine" shortcut from `tools/make_shortcut.py`) does the same
+without opening the app window. Any other HTTPS route to port 8765 works too (own tunnel, Tailscale Serve): enter it under Advanced.
+Without a web version the link opens the interface served by the engine itself.
 
-**2. The web UI.** Build it with `cd frontend && npm run build:web` (static files, vite mode `web`) and host the `dist` folder anywhere.
-On Vercel: import the repository, set *Root Directory* to `frontend`; `vercel.json` already contains the build command,
-SPA rewrite, security headers and a CSP. Open the connect link (or type address and token): the UI stores them in the browser
-and talks to the engine directly. The token sits in the `#connect=` fragment, which browsers never send to a server.
+**2. The web UI with a login and a fixed link.** Build it with `cd frontend && npm run build:web` (static files, vite mode `web`) and
+host it, e.g. on Vercel: *Root Directory* `frontend`; `vercel.json` has the build command, SPA rewrite, security headers and a CSP.
+Turn on *Vercel Authentication* for all deployments, so the page itself needs your Vercel login. The quick tunnel gets a new address
+on every start, so the web version includes a tiny registry (`frontend/api/rv.js`, Vercel Blob): the engine registers its current
+address there under an id derived from a private key, and the web UI looks it up. The link therefore never changes. For the engine to
+register through the login wall, create a *Protection Bypass for Automation* secret in the Vercel project and paste it under
+*Advanced → Registration key*, together with the address of the web version. The token sits in the `#connect=` fragment, which
+browsers never send to a server.
 
 **What a remote client can and cannot do.** It can generate, browse and favorite images, import and upload, load/unload models.
 It cannot browse the disk, change settings or folders, download models, delete files permanently or export to a folder.

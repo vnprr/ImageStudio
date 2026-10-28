@@ -48,7 +48,7 @@ pre = req("OPTIONS", "/api/jobs", host=REMOTE_HOST, headers={"Origin": "https://
 check("preflight 204 z nagłówkami CORS", pre.status_code == 204 and "authorization" in pre.headers.get("access-control-allow-headers", ""))
 
 for method, path in [("GET", "/api/fs/list"), ("PUT", "/api/settings"), ("POST", "/api/rescan"), ("GET", "/api/catalog"), ("POST", "/api/downloads"),
-                     ("GET", "/api/remote"), ("PUT", "/api/remote"), ("POST", "/api/remote/rotate"), ("POST", "/api/remote/tunnel"),
+                     ("GET", "/api/remote"), ("PUT", "/api/remote"), ("POST", "/api/remote/rotate"), ("POST", "/api/remote/tunnel"), ("POST", "/api/remote/enable"),
                      ("DELETE", "/api/images/abc"), ("POST", "/api/images/abc/export")]:
     r = req(method, path, host=REMOTE_HOST, token=token, json={} if method in ("PUT", "POST") else None)
     check(f"zdalnie zabronione {method} {path}", r.status_code == 403, str(r.status_code))

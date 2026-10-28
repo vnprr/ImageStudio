@@ -226,7 +226,9 @@ interface Settings {
 
 - `GET /api/ping` → `{ok, app: "image-studio", remote, media?}`; zdalnie zwraca też pochodny token mediów (do `<img>` i SSE).
 - `GET /api/remote` → stan: `enabled`, `token`, `public_url`, `web_ui_url`, `tunnel{state,url,error,installed}`, `effective_url`. **Tylko lokalnie.**
-- `PUT /api/remote` `{enabled?, public_url?, web_ui_url?, tunnel?: "off"|"auto"}`, `POST /api/remote/rotate`, `POST /api/remote/tunnel` `{action: "start"|"stop"}`. **Tylko lokalnie.**
+- `POST /api/remote/enable` `{enabled}`: jeden przycisk (instalacja tunelu z weryfikacją, start, rejestracja adresu). Stan: `install{state,progress}`, `tunnel`, `registry{state}`, `link`, `link_stable`.
+- `PUT /api/remote` `{enabled?, public_url?, web_ui_url?, rv_bypass?, tunnel?}`, `POST /api/remote/rotate`, `POST /api/remote/tunnel` `{action}`. **Tylko lokalnie.**
+- `GET/POST /api/rv` (funkcja na hostingu UI, nie w backendzie): rejestr bieżącego adresu silnika pod stałym identyfikatorem.
 - `GET /api/images/{id}/preview` → podgląd WebP (do 1600 px) do przeglądania przez sieć.
 - Klient zdalny wysyła `Authorization: Bearer <token>`; media i `/api/events` przyjmują `?token=<token mediów>`. Dozwolone endpointy zdalne
   są wymienione w `backend/remote.py` (`_ALLOWED`); reszta zwraca 403. `/api/settings`, `/api/models` i `/api/loras` nie zawierają ścieżek.

@@ -8,6 +8,8 @@ export interface Conn {
   token: string;
   /** pochodny token tylko do odczytu mediów: trafia do adresów obrazów i EventSource, które nie wysyłają nagłówków */
   media: string;
+  /** identyfikator w rejestrze adresów (/api/rv na hostingu UI): pozwala znaleźć silnik po zmianie adresu tunelu */
+  rv?: string;
 }
 
 const KEY = "is.conn";
@@ -41,6 +43,25 @@ export function normalizeBase(input: string): string {
   return u;
 }
 
+/** Aktualny adres silnika z rejestru na hostingu UI. Zwraca null, gdy rejestru nie ma albo silnik się nie zarejestrował. */
+export async function lookup(rv: string): Promise<string | null> {
+  try {
+    const r = await fetch(`/api/rv?id=${encodeURIComponent(rv)}`, { cache: "no-store" });
+    if (!r.ok) return null;
+    const j = (await r.json()) as { url?: string };
+    return j.url ? normalizeBase(j.url) : null;
+  } catch { return null; }
+}
+
+/** Po zmianie adresu tunelu (restart komputera) zapisuje nowy adres w połączeniu. Zwraca true, gdy się zmienił. */
+export async function refreshBase(): Promise<boolean> {
+  if (!conn?.rv) return false;
+  const url = await lookup(conn.rv);
+  if (!url || url === conn.base) return false;
+  setConn({ ...conn, base: url });
+  return true;
+}
+
 /** Sprawdza adres i token. Zwraca gotowe połączenie albo rzuca czytelny błąd (kod: 401, 403, 0 = brak połączenia). */
 export async function probe(base: string, token: string): Promise<Conn> {
   let res: Response;
@@ -58,18 +79,17 @@ export async function probe(base: string, token: string): Promise<Conn> {
 
 // --- link parowania: https://ui.example/#connect=<base64url JSON {u, t}>. Fragment nigdy nie trafia do żadnego serwera.
 
-export const encodeLink = (base: string, token: string) =>
-  btoa(JSON.stringify({ u: base, t: token })).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+export interface Link { t: string; u?: string; i?: string }
 
-function decodeLink(s: string): { u: string; t: string } | null {
+function decodeLink(s: string): Link | null {
   try {
     const j = JSON.parse(atob(s.replace(/-/g, "+").replace(/_/g, "/")));
-    return typeof j.u === "string" && typeof j.t === "string" ? j : null;
+    return typeof j.t === "string" && (typeof j.u === "string" || typeof j.i === "string") ? j : null;
   } catch { return null; }
 }
 
 /** Link parowania z adresu (czyszczony od razu, żeby token nie został w historii przeglądarki). */
-export const pendingLink: { u: string; t: string } | null = (() => {
+export const pendingLink: Link | null = (() => {
   try {
     const m = /(?:^#|&)connect=([^&]+)/.exec(location.hash);
     if (!m) return null;

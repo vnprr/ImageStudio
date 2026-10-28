@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { PlugZap } from "lucide-react";
-import { IS_WEB, getConn, normalizeBase, pendingLink, probe, setConn } from "../connection";
+import { IS_WEB, getConn, lookup, normalizeBase, pendingLink, probe, setConn } from "../connection";
 import { useT } from "../i18n";
 import { Logo, Spinner } from "./ui";
 
@@ -13,13 +13,14 @@ export function Connect() {
   const [err, setErr] = useState<string | null>(null);
   const auto = useRef(!!pendingLink);
 
-  const go = async (u = url, tk = token) => {
-    const base = normalizeBase(u);
-    if (!base || !tk.trim()) return;
+  const go = async (u = url, tk = token, rv?: string) => {
     setBusy(true);
     setErr(null);
+    // link ze stałym identyfikatorem: aktualny adres silnika bierzemy z rejestru, a gołego adresu z linku używamy tylko awaryjnie
+    const base = normalizeBase((rv ? await lookup(rv) : null) ?? u);
+    if (!base || !tk.trim()) { setBusy(false); setErr(t(rv ? "connect.errOffline" : "connect.errNet")); return; }
     try {
-      setConn(await probe(base, tk.trim()));
+      setConn({ ...(await probe(base, tk.trim())), ...(rv ? { rv } : {}) });
       location.reload();                              // czysty start: nowe SSE i dane z wybranego silnika
     } catch (e) {
       const code = (e as { code?: number }).code;
@@ -28,7 +29,7 @@ export function Connect() {
     }
   };
 
-  useEffect(() => { if (auto.current && pendingLink) { auto.current = false; void go(pendingLink.u, pendingLink.t); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (auto.current && pendingLink) { auto.current = false; void go(pendingLink.u ?? "", pendingLink.t, pendingLink.i); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const mixed = location.protocol === "https:" && /^http:\/\//i.test(normalizeBase(url)) && !/^http:\/\/(localhost|127\.0\.0\.1)/i.test(normalizeBase(url));
   return (

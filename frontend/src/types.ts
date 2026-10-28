@@ -262,6 +262,10 @@ export interface RemoteStatus {
   web_ui_url: string;
   tunnel_mode: "off" | "auto";
   tunnel: { state: "off" | "starting" | "up" | "error" | "missing"; url: string; error: string; installed: boolean };
+  install: { state: "idle" | "downloading" | "verifying" | "done" | "error"; progress: number; error: string };
+  registry: { state: "off" | "ok" | "error"; error: string; configured: boolean; protected: boolean };
+  link: string;
+  link_stable: boolean;
   effective_url: string;
   port: number;
   engine_env: boolean;

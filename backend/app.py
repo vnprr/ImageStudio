@@ -7,6 +7,7 @@ import os
 import platform
 import string
 import sys
+import threading
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -113,7 +114,7 @@ async def lifespan(app: FastAPI):
     task = asyncio.create_task(ticker())
     st = remote.get()
     if st["enabled"] and st["tunnel"] == "auto":
-        remote.tunnel.start(PORT)
+        remote.bring_up()
     yield
     task.cancel()
     remote.tunnel.stop()
@@ -196,18 +197,35 @@ class RemoteUpdate(BaseModel):
     enabled: bool | None = None
     public_url: str | None = Field(default=None, max_length=300)
     web_ui_url: str | None = Field(default=None, max_length=300)
+    rv_bypass: str | None = Field(default=None, max_length=200)
     tunnel: Literal["off", "auto"] | None = None
 
 
 @app.put("/api/remote")
 def api_remote_update(u: RemoteUpdate):
-    before = remote.get()
-    st = remote.update(enabled=u.enabled, public_url=(u.public_url or "").strip().rstrip("/") if u.public_url is not None else None,
-                       web_ui_url=(u.web_ui_url or "").strip().rstrip("/") if u.web_ui_url is not None else None, tunnel=u.tunnel)
-    if st["enabled"] and st["tunnel"] == "auto" and not before["enabled"] or (u.tunnel == "auto" and st["enabled"]):
-        remote.tunnel.start(PORT)
-    if not st["enabled"] or st["tunnel"] == "off":
+    clean = lambda v: v.strip().rstrip("/") if v is not None else None            # noqa: E731
+    st = remote.update(enabled=u.enabled, public_url=clean(u.public_url), web_ui_url=clean(u.web_ui_url), tunnel=u.tunnel,
+                       rv_bypass=clean(u.rv_bypass))
+    if st["enabled"] and st["tunnel"] == "auto":
+        remote.bring_up()
+        if remote.tunnel.url:
+            threading.Thread(target=remote.registry.register, args=(remote.tunnel.url,), daemon=True).start()
+    else:
         remote.tunnel.stop()
+        remote.registry.state = "off"
+    return remote.status()
+
+
+@app.post("/api/remote/enable")
+def api_remote_enable(u: RemoteUpdate):
+    """Jeden przycisk: włącza zdalny dostęp, instaluje i uruchamia tunel, rejestruje adres."""
+    if u.enabled is False:
+        remote.update(enabled=False)
+        remote.tunnel.stop()
+        remote.registry.state = "off"
+    else:
+        remote.update(enabled=True, tunnel="auto")
+        remote.retry_install() if remote.installer.state == "error" else remote.bring_up()
     return remote.status()
 
 
@@ -224,42 +242,10 @@ class TunnelAction(BaseModel):
 @app.post("/api/remote/tunnel")
 def api_remote_tunnel(a: TunnelAction):
     if a.action == "start":
-        remote.tunnel.start(PORT)
+        remote.retry_install() if not remote.find_cloudflared() else remote.tunnel.start(PORT)
     else:
         remote.tunnel.stop()
     return remote.status()
-
-
-@app.put("/api/settings")
-def api_put_settings(s: Settings):
-    save_settings(s)
-    registry.scan()
-    hub.emit("models", {})
-    return get_settings()
-
-
-@app.get("/api/fs/list")
-def fs_list(path: str = ""):
-    if not path:
-        if sys.platform == "win32":
-            drives = [f"{d}:\\" for d in string.ascii_uppercase if Path(f"{d}:\\").exists()]
-            return {"path": "", "parent": None, "entries": [{"name": d, "path": d, "is_dir": True} for d in drives]}
-        path = str(Path.home())
-    p = Path(path)
-    if not p.is_dir():
-        raise HTTPException(404, "Folder nie istnieje.")
-    entries = []
-    try:
-        for c in sorted(p.iterdir(), key=lambda x: x.name.lower()):
-            try:
-                if c.is_dir() and not c.name.startswith(("$", ".")):
-                    entries.append({"name": c.name, "path": str(c), "is_dir": True})
-            except OSError:
-                continue
-    except PermissionError:
-        raise HTTPException(403, "Brak dostępu do folderu.")
-    parent = str(p.parent) if p.parent != p else ""
-    return {"path": str(p), "parent": parent, "entries": entries}
 
 
 # ───────────────────────── modele / LoRA / pobieranie ─────────────────────────

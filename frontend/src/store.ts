@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { ApiError, api, connectEvents, type EventType } from "./api";
 import { tr } from "./i18n";
-import { IS_WEB, getConn, isRemote } from "./connection";
+import { IS_WEB, getConn, isRemote, refreshBase } from "./connection";
 import { clamp, debounce, dimsFor, uid } from "./lib";
 import { emptyPaint, hasDoodle, hasMask, renderDoodled, renderMaskPng, type Layer, type PaintDoc, type Stroke } from "./paint";
 import type {
@@ -300,12 +300,14 @@ export const useStore = create<Store>()(
           (online) => {
             const was = get().online;
             set({ online });
+            if (!online) void refreshBase().then((changed) => { if (changed) location.reload(); });
             if (online && was === false) void get().bootData();
           },
         );
       },
 
       bootData: async () => {
+        await refreshBase();                       // po restarcie komputera adres tunelu jest nowy: bierzemy go z rejestru
         try {
           const system = await api.system();
           set({ system, online: true });

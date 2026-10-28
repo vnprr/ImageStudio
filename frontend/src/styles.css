@@ -696,3 +696,31 @@ html[data-desktop] { overscroll-behavior: none; }
 .tpill.error, .tpill.missing { color: #ffb0be; border-color: rgba(255, 93, 120, .45); }
 .card .warn { margin-top: 12px; }
 .card .warn code { background: rgba(0, 0, 0, .35); padding: 1px 6px; border-radius: 6px; }
+
+/* ------------------------------------------------------------ zdalny dostęp: jeden przycisk */
+.remote-card.online { border-color: rgba(46, 230, 166, .35); box-shadow: 0 0 40px -22px rgba(46, 230, 166, .6), inset 0 1px 0 rgba(255, 255, 255, .04); }
+.remote-head { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 14px; }
+.remote-head > div { flex: 1; min-width: 0; }
+.remote-head h3 { margin: 0 0 4px; }
+.remote-head .note { margin: 0; }
+.remote-globe { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border-radius: 12px; background: var(--grad-soft); border: 1px solid rgba(255, 138, 61, .35); color: #ffd0a8; }
+.tpill.off { color: var(--muted); }
+.btn.big { width: 100%; min-height: 52px; font-size: 14px; font-weight: 650; border-radius: 13px; }
+.remote-bullets { margin: 14px 0 4px; padding-left: 18px; color: var(--muted); font-size: 11.5px; line-height: 1.7; }
+.rsteps { display: flex; flex-direction: column; gap: 9px; margin: 4px 0 12px; }
+.rstep { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--sub); flex-wrap: wrap; }
+.rstep.wait { color: var(--faint); }
+.rstep.ok .rstep-ico { color: var(--mint); border-color: rgba(46, 230, 166, .5); }
+.rstep.err .rstep-ico { color: var(--danger); border-color: rgba(255, 93, 120, .5); }
+.rstep-ico { width: 20px; height: 20px; flex: none; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line2); }
+.rstep-ico i { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
+.rstep small { color: var(--muted); font-size: 11px; }
+.rstep.err small { color: #ffb0be; flex-basis: 100%; padding-left: 30px; }
+.remote-online { display: flex; gap: 18px; align-items: center; margin-top: 8px; padding: 14px; border-radius: var(--r2); background: var(--k3); border: 1px solid var(--line); flex-wrap: wrap; }
+.remote-online-side { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 6px; }
+.remote-online-side .note { margin: 0; }
+.qr { width: 132px; height: 132px; flex: none; background: #fff; border-radius: 10px; padding: 4px; }
+.qr svg { width: 100%; height: 100%; display: block; }
+.remote-adv { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 12px; }
+.remote-adv summary { cursor: pointer; font-size: 11.5px; color: var(--sub); }
+.remote-adv[open] summary { margin-bottom: 10px; }
