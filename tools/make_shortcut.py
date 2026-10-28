@@ -41,18 +41,25 @@ def logo() -> Image.Image:
     return img
 
 
+def make_lnk(lnk: Path, pyw: Path, app: Path, ico: Path, args: str, desc: str) -> None:
+    ps = (f"$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{lnk}');"
+          f"$s.TargetPath='{pyw}';$s.Arguments='\"{app / 'launcher.pyw'}\"{args}';$s.WorkingDirectory='{app}';"
+          f"$s.IconLocation='{ico}';$s.Description='{desc}';$s.Save()")
+    subprocess.run(["powershell", "-NoProfile", "-Command", ps], check=True)
+
+
 def main() -> None:
+    """python tools/make_shortcut.py [FOLDER_APLIKACJI]: ikona + skróty „Image Studio” i „Image Studio Engine” (tryb silnika)."""
+    app = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else ROOT
     (ROOT / "assets").mkdir(exist_ok=True)
     ico = ROOT / "assets" / "icon.ico"
     logo().save(ico, sizes=[(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)])
     py = Path(sys.executable)
     pyw = py.with_name("pythonw.exe") if py.with_name("pythonw.exe").exists() else py
-    lnk = ROOT / "Image Studio.lnk"
-    ps = (f"$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{lnk}');"
-          f"$s.TargetPath='{pyw}';$s.Arguments='\"{ROOT / 'launcher.pyw'}\"';$s.WorkingDirectory='{ROOT}';"
-          f"$s.IconLocation='{ico}';$s.Description='Image Studio';$s.Save()")
-    subprocess.run(["powershell", "-NoProfile", "-Command", ps], check=True)
-    print("OK:", ico, lnk)
+    ico_app = app / "assets" / "icon.ico" if (app / "assets" / "icon.ico").exists() else ico
+    make_lnk(app / "Image Studio.lnk", pyw, app, ico_app, "", "Image Studio")
+    make_lnk(app / "Image Studio Engine.lnk", pyw, app, ico_app, " --engine", "Image Studio: tryb silnika (zdalny dostęp)")
+    print("OK:", ico_app, app / "Image Studio.lnk", app / "Image Studio Engine.lnk")
 
 
 if __name__ == "__main__":

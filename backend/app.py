@@ -15,13 +15,13 @@ from typing import Literal
 import diffusers
 import psutil
 import torch
-from fastapi import FastAPI, File, HTTPException, Query, Response, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
-from . import db, downloads, library
+from . import db, downloads, library, remote
 from .config import PORT, ROOT, Settings, get_settings, library_dir, save_settings
 from .engine import capabilities, engine, gpu_stats, model_notes
 from .jobs import JobManager
@@ -111,24 +111,32 @@ async def lifespan(app: FastAPI):
                 except Exception:
                     pass
     task = asyncio.create_task(ticker())
+    st = remote.get()
+    if st["enabled"] and st["tunnel"] == "auto":
+        remote.tunnel.start(PORT)
     yield
     task.cancel()
+    remote.tunnel.stop()
     engine.unload()                                          # zamknięcie programu = zwolnienie modelu z VRAM/RAM
 
 
 app = FastAPI(title="Image Studio", lifespan=lifespan)
+app.add_middleware(remote.RemoteGate)       # zdalny dostęp: token, lista dozwolonych endpointów, CORS tylko dla zdalnych
 
 
-def _model_info(e: dict) -> dict:
-    return {"id": e["id"], "name": e["name"], "family": e["family"], "kind": e["kind"], "path": e["path"],
+def _model_info(e: dict, hide_paths: bool = False) -> dict:
+    return {"id": e["id"], "name": e["name"], "family": e["family"], "kind": e["kind"], "path": "" if hide_paths else e["path"],
             "size_bytes": e["size_bytes"], "status": e["status"], "unsupported_reason": e.get("unsupported_reason"),
             "loaded": engine.loaded_id == e["id"], "loading": engine.loading_id == e["id"],
             "capabilities": capabilities(e) if e["status"] == "ready" else None, "license": e.get("license"),
             "notes": model_notes(e) if e["status"] == "ready" else None}
 
 
-def _lora_info(l: dict) -> dict:
-    return {k: l.get(k) for k in ("id", "name", "path", "size_bytes", "family", "compatible_model_ids", "status", "reason", "default_strength")}
+def _lora_info(l: dict, hide_paths: bool = False) -> dict:
+    out = {k: l.get(k) for k in ("id", "name", "path", "size_bytes", "family", "compatible_model_ids", "status", "reason", "default_strength")}
+    if hide_paths:
+        out["path"] = ""
+    return out
 
 
 # ───────────────────────── system / settings ─────────────────────────
@@ -162,9 +170,64 @@ async def events():
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+@app.get("/api/ping")
+def api_ping(request: Request):
+    """Sprawdzenie połączenia i tokenu. Zdalny klient dostaje pochodny token do odczytu mediów (obrazy, zdarzenia)."""
+    out: dict = {"ok": True, "app": "image-studio", "remote": bool(request.scope.get("is_remote"))}
+    if out["remote"]:
+        out["media"] = remote.media_token(remote.get()["token"])
+    return out
+
+
 @app.get("/api/settings")
-def api_get_settings():
-    return get_settings()
+def api_get_settings(request: Request):
+    s = get_settings()
+    if request.scope.get("is_remote"):                      # klient zdalny nie widzi ścieżek ani tokenu Hugging Face
+        return s.model_copy(update={"model_dirs": [], "lora_dirs": [], "library_dir": "", "hf_token": None})
+    return s
+
+
+@app.get("/api/remote")
+def api_remote_status():
+    return remote.status()
+
+
+class RemoteUpdate(BaseModel):
+    enabled: bool | None = None
+    public_url: str | None = Field(default=None, max_length=300)
+    web_ui_url: str | None = Field(default=None, max_length=300)
+    tunnel: Literal["off", "auto"] | None = None
+
+
+@app.put("/api/remote")
+def api_remote_update(u: RemoteUpdate):
+    before = remote.get()
+    st = remote.update(enabled=u.enabled, public_url=(u.public_url or "").strip().rstrip("/") if u.public_url is not None else None,
+                       web_ui_url=(u.web_ui_url or "").strip().rstrip("/") if u.web_ui_url is not None else None, tunnel=u.tunnel)
+    if st["enabled"] and st["tunnel"] == "auto" and not before["enabled"] or (u.tunnel == "auto" and st["enabled"]):
+        remote.tunnel.start(PORT)
+    if not st["enabled"] or st["tunnel"] == "off":
+        remote.tunnel.stop()
+    return remote.status()
+
+
+@app.post("/api/remote/rotate")
+def api_remote_rotate():
+    remote.rotate_token()
+    return remote.status()
+
+
+class TunnelAction(BaseModel):
+    action: Literal["start", "stop"]
+
+
+@app.post("/api/remote/tunnel")
+def api_remote_tunnel(a: TunnelAction):
+    if a.action == "start":
+        remote.tunnel.start(PORT)
+    else:
+        remote.tunnel.stop()
+    return remote.status()
 
 
 @app.put("/api/settings")
@@ -202,13 +265,13 @@ def fs_list(path: str = ""):
 # ───────────────────────── modele / LoRA / pobieranie ─────────────────────────
 
 @app.get("/api/models")
-def api_models():
-    return [_model_info(e) for e in registry.models]
+def api_models(request: Request):
+    return [_model_info(e, bool(request.scope.get("is_remote"))) for e in registry.models]
 
 
 @app.get("/api/loras")
-def api_loras():
-    return [_lora_info(l) for l in registry.loras]
+def api_loras(request: Request):
+    return [_lora_info(l, bool(request.scope.get("is_remote"))) for l in registry.loras]
 
 
 @app.post("/api/rescan")
@@ -422,6 +485,14 @@ def api_image_file(iid: str):
     if not p or not p.exists():
         raise HTTPException(404)
     return FileResponse(p, media_type="image/png", headers={"Cache-Control": "public, max-age=31536000, immutable"})
+
+
+@app.get("/api/images/{iid}/preview")
+def api_image_preview(iid: str):
+    p = library.preview_path(iid)
+    if not p or not p.exists():
+        raise HTTPException(404)
+    return FileResponse(p, media_type="image/webp", headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
 
 @app.get("/api/images/{iid}/thumb")

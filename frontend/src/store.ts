@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { api, connectEvents, type EventType } from "./api";
+import { ApiError, api, connectEvents, type EventType } from "./api";
 import { tr } from "./i18n";
+import { IS_WEB, getConn, isRemote } from "./connection";
 import { clamp, debounce, dimsFor, uid } from "./lib";
 import { emptyPaint, hasDoodle, hasMask, renderDoodled, renderMaskPng, type Layer, type PaintDoc, type Stroke } from "./paint";
 import type {
@@ -100,6 +101,8 @@ interface State {
   ui: UiPrefs;
   // dane z backendu
   online: boolean | null;
+  /** silnik odpowiedział 401: token zły albo zmieniony (pokazujemy ekran łączenia) */
+  authRequired: boolean;
   models: ModelInfo[];
   loras: LoraInfo[];
   system: SystemStats | null;
@@ -244,6 +247,7 @@ export const useStore = create<Store>()(
       perModel: {},
       ui: defaultUi,
       online: null,
+      authRequired: false,
       models: [],
       loras: [],
       system: null,
@@ -269,7 +273,9 @@ export const useStore = create<Store>()(
       // ------------------------------------------------------------ start
       boot: () => {
         if (booted) return;
+        if (IS_WEB && !getConn()) return;          // wersja web bez połączenia: najpierw ekran łączenia
         booted = true;
+        window.addEventListener("is:unauthorized", () => set({ authRequired: true }));
         void get().bootData();
         connectEvents(
           (type: EventType, data: unknown) => {
@@ -303,15 +309,16 @@ export const useStore = create<Store>()(
         try {
           const system = await api.system();
           set({ system, online: true });
-        } catch {
-          set({ online: false });
+        } catch (e) {
+          if (e instanceof ApiError && e.status === 401) set({ authRequired: true, online: true });
+          else set({ online: false });
           return;
         }
         const safe = <T,>(p: Promise<T>, fb: T) => p.catch(() => fb);
         const [settings, models, loras, presets, promptLib, jobs, downloads] = await Promise.all([
           safe(api.settings(), null), safe(api.models(), [] as ModelInfo[]), safe(api.loras(), [] as LoraInfo[]),
           safe(api.presets(), [] as Preset[]), safe(api.promptLibrary(), null), safe(api.jobs(), [] as Job[]),
-          safe(api.downloads(), [] as DownloadState[]),
+          safe(isRemote() ? Promise.resolve([] as DownloadState[]) : api.downloads(), [] as DownloadState[]),
         ]);
         set({
           settings, models, loras, presets, promptLib,
@@ -656,7 +663,7 @@ export const useStore = create<Store>()(
           }
           for (const f of imgs.slice(0, 12)) {
             const u = await api.upload(f, f.name);
-            addAttachment({ ref: { upload_id: u.upload_id }, url: u.url || api.uploadUrl(u.upload_id), name: f.name, width: u.width, height: u.height });
+            addAttachment({ ref: { upload_id: u.upload_id }, url: api.uploadUrl(u.upload_id), name: f.name, width: u.width, height: u.height });
           }
         } catch (e) { get().toast("error", (e as Error).message); }
       },

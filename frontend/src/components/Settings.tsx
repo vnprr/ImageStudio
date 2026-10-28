@@ -3,9 +3,11 @@ import { AlertTriangle, Check, Download, FolderOpen, Plus, RefreshCw, Save, X } 
 import { api } from "../api";
 import { LANGS, getLang, setLang, useT, type Lang } from "../i18n";
 import { fmtBytes, fmtEta, joinPath } from "../lib";
+import { isRemote } from "../connection";
 import { useStore } from "../store";
 import type { CatalogEntry, RepoInspect, SaveFormat, Settings as SettingsT } from "../types";
 import { FolderPicker } from "./FolderPicker";
+import { RemoteAccess } from "./RemoteAccess";
 import { Help, Spinner } from "./ui";
 
 // ------------------------------------------------------------------ lista ścieżek
@@ -181,6 +183,7 @@ export function Settings() {
   const [scanning, setScanning] = useState(false);
   const [comfy, setComfy] = useState(false);
   const lang = getLang();
+  const remote = isRemote();                 // klient zdalny: bez folderów, instalacji modeli i zmiany ustawień silnika
 
   useEffect(() => { if (stored) setDraft(stored); }, [stored]);
   const dirty = useMemo(() => !!draft && !!stored && JSON.stringify(draft) !== JSON.stringify(stored), [draft, stored]);
@@ -219,7 +222,9 @@ export function Settings() {
         </div>
       </div>
 
-      {!draft ? (
+      <RemoteAccess />
+
+      {remote ? null : !draft ? (
         <div className="card"><Spinner /> {t("loading")}</div>
       ) : (
         <div className="card">
@@ -299,9 +304,11 @@ export function Settings() {
       <div className="card">
         <div className="card-head">
           <h3>{t("settings.models")}</h3>
-          <button className="btn small" disabled={scanning} onClick={async () => { setScanning(true); await rescan(); setScanning(false); }}>
-            {scanning ? <Spinner /> : <RefreshCw size={13} />} {t("settings.rescan")}
-          </button>
+          {!remote && (
+            <button className="btn small" disabled={scanning} onClick={async () => { setScanning(true); await rescan(); setScanning(false); }}>
+              {scanning ? <Spinner /> : <RefreshCw size={13} />} {t("settings.rescan")}
+            </button>
+          )}
         </div>
         {models.length === 0 && <div className="muted">{t("model.none")}</div>}
         {models.map((m) => (
@@ -309,7 +316,7 @@ export function Settings() {
             <div>
               <b>{m.name}</b>
               <small>{m.family} · {m.kind} · {fmtBytes(m.size_bytes)} {m.license ? `· ${m.license}` : ""}</small>
-              <small className="path">{m.path}</small>
+              {!remote && <small className="path">{m.path}</small>}
               {m.status !== "ready" && <small className="warn-text"><AlertTriangle size={12} /> {m.unsupported_reason}</small>}
             </div>
             {m.status === "ready" && (
@@ -322,7 +329,7 @@ export function Settings() {
         <div className="muted small spaced">LoRA: {loras.length} · {t("lora.compat", { n: loras.filter((l) => l.status === "ready").length })}</div>
       </div>
 
-      <Installer />
+      {!remote && <Installer />}
 
       <div className="card">
         <h3>{t("settings.system")}</h3>

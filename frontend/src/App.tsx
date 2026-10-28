@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, Info, LayoutGrid, Menu, RefreshCw, Settings as Cog, Sparkles, X } from "lucide-react";
 import { tr, useT } from "./i18n";
+import { IS_WEB, getConn, isRemote, setConn } from "./connection";
 import { isDesktop } from "./lib";
 import { pendingJobs, useStore } from "./store";
 import { Composer } from "./components/Composer";
+import { Connect } from "./components/Connect";
 import { ContextMenu, editMenu } from "./components/ContextMenu";
 import { Details } from "./components/Details";
 import { History } from "./components/History";
@@ -20,13 +22,24 @@ function Offline() {
   const t = useT();
   const bootData = useStore((s) => s.bootData);
   const [busy, setBusy] = useState(false);
+  const remote = isRemote();
   return (
     <div className="offline">
       <div className="offline-card">
         <Logo size={56} />
         <h1>{t("offline.title")}</h1>
-        <p>{t("offline.text")}</p>
-        <pre>{`run.bat\n\npython -m uvicorn backend.app:app --port 8765`}</pre>
+        {remote ? (
+          <>
+            <p>{t("offline.remoteText")}</p>
+            <p className="muted small trunc">{getConn()?.base}</p>
+            <button className="btn ghost" onClick={() => { setConn(null); location.reload(); }}>{t("remote.client.disconnect")}</button>
+          </>
+        ) : (
+          <>
+            <p>{t("offline.text")}</p>
+            <pre>{`run.bat\n\npython -m uvicorn backend.app:app --port 8765`}</pre>
+          </>
+        )}
         <p className="muted small">{t("offline.auto")}</p>
         <button className="btn amber" disabled={busy} onClick={async () => { setBusy(true); await bootData(); setBusy(false); }}>
           {busy ? <Spinner /> : <RefreshCw size={14} />} {t("retry")}
@@ -57,6 +70,7 @@ export default function App() {
   const online = useStore((s) => s.online);
   const page = useStore((s) => s.page);
   const composerOpen = useStore((s) => s.composerOpen);
+  const authRequired = useStore((s) => s.authRequired);
   const width = useStore((s) => s.ui.sidebarWidth);
   const setUi = useStore((s) => s.setUi);
   const setPage = useStore((s) => s.setPage);
@@ -200,6 +214,7 @@ export default function App() {
     window.addEventListener("pointerup", up);
   }, [setUi]);
 
+  if ((IS_WEB && !getConn()) || authRequired) return <><Connect /><Toasts /></>;
   if (online === null) return <div className="splash"><Spinner size={22} /></div>;
   if (online === false) return <><Offline /><Toasts /></>;
 

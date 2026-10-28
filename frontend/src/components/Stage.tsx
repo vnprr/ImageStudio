@@ -68,7 +68,7 @@ export function Stage() {
   // Co pokazujemy: obraz otwarty do malowania, wynik (zaznaczony obraz) albo samo źródło, gdy nie ma jeszcze wyniku.
   const showSource = painting || (!selected && !!source && (mode === "edit" || mode === "inpaint"));
   const shown = painting ? paintAtt : source;
-  const imgUrl = showSource ? shown?.url ?? null : selected?.url ?? null;
+  const imgUrl = showSource ? shown?.url ?? null : (selected ? api.stageUrl(selected.id) : null);
   const known = showSource ? (shown?.width && shown?.height ? { w: shown.width, h: shown.height } : null) : selected ? { w: selected.width, h: selected.height } : null;
   const dim = known ?? nat ?? { w: formW, h: formH };
   const aspect = dim.w / dim.h;

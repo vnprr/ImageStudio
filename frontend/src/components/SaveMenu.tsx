@@ -3,6 +3,7 @@ import { ChevronDown, Download, FolderOpen } from "lucide-react";
 import { api } from "../api";
 import { useT } from "../i18n";
 import { extFor, fileSafe, mimeFor } from "../lib";
+import { isRemote } from "../connection";
 import { useStore } from "../store";
 import type { ImageRecord, SaveFormat } from "../types";
 import { FolderPicker } from "./FolderPicker";
@@ -121,14 +122,18 @@ export function SaveMenu({ image }: { image: ImageRecord | null }) {
             <span>{t("save.meta")}<small>{ui.saveFormat === "png" ? t("save.metaPng") : t("save.metaOther")}</small></span>
           </label>
           <button className="btn amber wide" disabled={busy} onClick={() => { void quick(); setOpen(false); }}><Download size={14} /> {t("save.browser")}</button>
-          <div className="pop-sep" />
-          <div className="label">{t("save.toFolder")}</div>
-          <div className="with-btn">
-            <input type="text" value={dest} spellCheck={false} onChange={(e) => setDest(e.target.value)} aria-label={t("save.toFolder")} />
-            <button className="icon-btn" title={t("folder.browse")} onClick={() => setPicking(!picking)}><FolderOpen size={14} /></button>
-          </div>
-          {picking && <FolderPicker start={dest} onPick={(p) => { setDest(p); setPicking(false); }} onClose={() => setPicking(false)} />}
-          <button className="btn wide" disabled={busy || !dest} onClick={() => void toFolder()}><FolderOpen size={14} /> {t("save.toFolderBtn")}</button>
+          {!isRemote() && (
+            <>
+              <div className="pop-sep" />
+              <div className="label">{t("save.toFolder")}</div>
+              <div className="with-btn">
+                <input type="text" value={dest} spellCheck={false} onChange={(e) => setDest(e.target.value)} aria-label={t("save.toFolder")} />
+                <button className="icon-btn" title={t("folder.browse")} onClick={() => setPicking(!picking)}><FolderOpen size={14} /></button>
+              </div>
+              {picking && <FolderPicker start={dest} onPick={(p) => { setDest(p); setPicking(false); }} onClose={() => setPicking(false)} />}
+              <button className="btn wide" disabled={busy || !dest} onClick={() => void toFolder()}><FolderOpen size={14} /> {t("save.toFolderBtn")}</button>
+            </>
+          )}
         </div>
       )}
     </div>

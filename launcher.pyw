@@ -3,10 +3,14 @@
 Okno to Edge/Chrome w trybie `--app` z własnym profilem (data/app-profile). Zamknięcie okna zatrzymuje backend,
 a tym samym zwalnia model z VRAM/RAM. Tylko biblioteka standardowa. Uruchamiaj przez pythonw (bez konsoli).
 
+Tryb silnika (`--engine`): bez okna aplikacji. Backend działa ze zdalnym dostępem i tunelem, a okienko z adresem i tokenem
+(link połączenia trafia do schowka) trzyma go przy życiu; OK zatrzymuje silnik i zwalnia model z pamięci.
+
 Interpreter z PyTorchem: zmienna IMAGE_STUDIO_PYTHON albo `data/launcher.json` -> {"python": "ścieżka\\do\\python.exe"}.
 """
 from __future__ import annotations
 
+import base64
 import ctypes
 import json
 import os
@@ -24,8 +28,41 @@ APP_URL = f"{URL}/?desktop=1"                 # ?desktop=1: interfejs wyłącza 
 NO_WINDOW = 0x08000000
 
 
-def message(text: str) -> None:
-    ctypes.windll.user32.MessageBoxW(0, text, "Image Studio", 0x10)
+def message(text: str, flags: int = 0x10) -> None:
+    ctypes.windll.user32.MessageBoxW(0, text, "Image Studio", flags)
+
+
+def api(method: str, path: str, body: dict | None = None) -> dict:
+    """Lokalne wywołanie API backendu (Host 127.0.0.1, więc bez tokenu)."""
+    req = urllib.request.Request(URL + path, method=method, data=json.dumps(body).encode() if body is not None else None,
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=5) as r:
+        return json.loads(r.read() or b"{}")
+
+
+def engine_info() -> str:
+    """Czeka na tunel (do ok. 40 s) i składa tekst dla okienka silnika; link połączenia kopiuje do schowka."""
+    st: dict = {}
+    for _ in range(40):
+        try:
+            st = api("GET", "/api/remote")
+        except Exception:
+            st = {}
+        if st.get("effective_url") or st.get("tunnel", {}).get("state") in ("missing", "error"):
+            break
+        time.sleep(1)
+    url, token = st.get("effective_url", ""), st.get("token", "")
+    lines = ["Tryb silnika działa. Ten komputer generuje obrazy dla Twojej wersji web.", ""]
+    if url:
+        code = base64.urlsafe_b64encode(json.dumps({"u": url, "t": token}).encode()).decode().rstrip("=")
+        link = f"{st.get('web_ui_url') or url}/#connect={code}"
+        subprocess.run(["clip"], input=link.encode("utf-16"), creationflags=NO_WINDOW)
+        lines += [f"Adres:  {url}", f"Token:  {token}", "", "Link połączenia skopiowano do schowka (wklej go w przeglądarce)."]
+    else:
+        state = st.get("tunnel", {}).get("state", "off")
+        lines += [f"Brak adresu publicznego (tunel: {state}).", "Zainstaluj tunel:  winget install Cloudflare.cloudflared",
+                  "albo wpisz własny adres w Ustawienia → Zdalny dostęp.", "", f"Token:  {token}"]
+    return "\n".join(lines + ["", "Kliknij OK, aby zatrzymać silnik."])
 
 
 def server_up() -> bool:
@@ -60,6 +97,7 @@ def find_python() -> Path:
 
 
 def main() -> None:
+    engine = "--engine" in sys.argv
     DATA.mkdir(exist_ok=True)
     python = find_python()
     if not python.exists():
@@ -70,7 +108,8 @@ def main() -> None:
         log = open(DATA / "server.log", "ab")
         server = subprocess.Popen(
             [str(python), "-m", "uvicorn", "backend.app:app", "--host", "127.0.0.1", "--port", str(PORT), "--log-level", "warning"],
-            cwd=ROOT, stdout=log, stderr=log, creationflags=NO_WINDOW)
+            cwd=ROOT, stdout=log, stderr=log, creationflags=NO_WINDOW,
+            env={**os.environ, **({"IMAGE_STUDIO_ENGINE": "1"} if engine else {})})
         for _ in range(120):
             if server_up():
                 break
@@ -82,6 +121,17 @@ def main() -> None:
             message("Backend nie odpowiada. Szczegóły: data\\server.log")
             server.kill()
             return
+
+    if engine:
+        if server is None:                    # aplikacja już działa: włącz zdalny dostęp przez API (zapisuje się w ustawieniach)
+            try:
+                api("PUT", "/api/remote", {"enabled": True, "tunnel": "auto"})
+            except Exception:
+                pass
+        message(engine_info(), 0x40)
+        if server is not None:
+            subprocess.run(["taskkill", "/PID", str(server.pid), "/T", "/F"], capture_output=True, creationflags=NO_WINDOW)
+        return
 
     browser = find_browser()
     if not browser:

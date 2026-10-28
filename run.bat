@@ -6,4 +6,7 @@ setlocal
 set "ROOT=%~dp0"
 cd /d "%ROOT%"
 if not exist "%ROOT%frontend\dist\index.html" (echo Brak frontend\dist - uruchom: cd frontend ^&^& npm install ^&^& npm run build & pause & exit /b 1)
-if "%IMAGE_STUDIO_CONSOLE%"=="1" (python launcher.pyw) else (start "" pythonw launcher.pyw)
+rem Tryb silnika (zdalny dostep, bez okna): run.bat engine
+set "ARGS="
+if /i "%~1"=="engine" set "ARGS=--engine"
+if "%IMAGE_STUDIO_CONSOLE%"=="1" (python launcher.pyw %ARGS%) else (start "" pythonw launcher.pyw %ARGS%)

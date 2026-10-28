@@ -16,6 +16,7 @@ application folder and are never part of the repository (see [Code vs. applicati
 - One parameters panel: basic settings plus an "Advanced" switch (exact width and height in pixels, seed, guidance, ...).
 - Model manager with downloads (size, license and free space shown before downloading), load/unload to free VRAM.
 - Desktop window (Edge/Chrome `--app` mode) without the browser's context menu or text selection.
+- Web version and engine mode: use your home GPU from anywhere through a static web UI and a tunnel (see below).
 
 ## Requirements
 
@@ -44,6 +45,41 @@ Set the interpreter that has PyTorch with `IMAGE_STUDIO_PYTHON` or `data/launche
 `tools/make_shortcut.py` creates an icon and a `.lnk` shortcut. Diagnostics: `set IMAGE_STUDIO_CONSOLE=1` before `run.bat`,
 backend log in `data/server.log`.
 
+## Web version and engine mode
+
+The same app can run as a **web page** (for example on Vercel) while generation happens on **your own computer**, which acts
+as the engine ("slave"). Nothing is generated in the cloud and no relay server is needed:
+
+```
+phone / laptop browser ──HTTPS──► web UI (static build, Vercel)
+        │                                   
+        └──────────HTTPS + token──► tunnel (cloudflared) ──► your PC: Image Studio engine ──► GPU
+```
+
+**1. On the PC (engine).** Install a tunnel once: `winget install Cloudflare.cloudflared`. Then either open
+*Settings → Remote access* and switch it on, or start the windowless engine with `run.bat engine` (or the
+"Image Studio Engine" shortcut from `tools/make_shortcut.py`). The tunnel gets a random `https://….trycloudflare.com` address;
+the settings page (or the engine window) shows it with an access token and a **connect link**. Any other HTTPS route to
+port 8765 works too (your own tunnel, Tailscale Serve, reverse proxy): enter it as "own public address".
+
+**2. The web UI.** Build it with `cd frontend && npm run build:web` (static files, vite mode `web`) and host the `dist` folder anywhere.
+On Vercel: import the repository, set *Root Directory* to `frontend`; `vercel.json` already contains the build command,
+SPA rewrite, security headers and a CSP. Open the connect link (or type address and token): the UI stores them in the browser
+and talks to the engine directly. The token sits in the `#connect=` fragment, which browsers never send to a server.
+
+**What a remote client can and cannot do.** It can generate, browse and favorite images, import and upload, load/unload models.
+It cannot browse the disk, change settings or folders, download models, delete files permanently or export to a folder.
+Images are served as light WebP previews over the network; full PNG stays one click away (Save).
+
+Security model (`backend/remote.py`, checked by `tools/remote_checks.py`):
+
+- A request is *local* only when its `Host` is `127.0.0.1`/`localhost`/`[::1]`. Tunnels connect from loopback, so the client address
+  is not trusted; the public host name is. This also defeats DNS-rebinding.
+- Local requests need no token, but a browser page from another site cannot reach them (non-loopback `Origin` is refused).
+- Remote requests need the token and an allow-listed endpoint. A wrong token costs 0.4 s. `<img>`/SSE use a derived read-only media token.
+- CORS headers are sent only on remote responses. The token can be rotated in the settings (disconnects everyone).
+- Remote access is off by default, and the switch is local-only.
+
 ## Code vs. application
 
 | | Code (this repository) | Installed application |
@@ -66,6 +102,7 @@ Where things live is configurable, so the code can also run against any data fol
 | `IMAGE_STUDIO_PORT` | backend port | `8765` |
 | `IMAGE_STUDIO_PYTHON` | interpreter that has PyTorch (launcher) | current Python |
 | `COMFYUI_DIR` | optional ComfyUI folder whose `models/` is scanned | auto-detected |
+| `IMAGE_STUDIO_ENGINE` | `1` = engine mode: remote access on and tunnel started (set by `run.bat engine`) | off |
 
 ## Models
 

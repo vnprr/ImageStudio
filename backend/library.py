@@ -150,6 +150,21 @@ def thumb_path(iid: str) -> Path:
     return p
 
 
+def preview_path(iid: str, side: int = 1600) -> Path | None:
+    """Podgląd WebP (dłuższy bok do `side` px) do przeglądania przez sieć: kilka razy mniejszy niż oryginalny PNG."""
+    p = library_dir() / "thumbs" / f"{iid}_p.webp"
+    if not p.exists():
+        src = image_path(iid)
+        if not src or not src.exists():
+            return None
+        with Image.open(src) as im:
+            t = im.convert("RGB")
+            t.thumbnail((side, side), Image.LANCZOS)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            t.save(p, "WEBP", quality=88, method=4)
+    return p
+
+
 def list_images(query: str = "", flt: str = "all", sort: str = "new", model_id: str | None = None,
                 limit: int = 60, offset: int = 0) -> dict:
     where, args = [], []
@@ -188,7 +203,7 @@ def delete_image(iid: str) -> bool:
     p = image_path(iid)
     if p is None:
         return False
-    for f in (p, p.with_suffix(".json"), library_dir() / "thumbs" / f"{iid}.webp"):
+    for f in (p, p.with_suffix(".json"), library_dir() / "thumbs" / f"{iid}.webp", library_dir() / "thumbs" / f"{iid}_p.webp"):
         try:
             f.unlink(missing_ok=True)
         except OSError:

@@ -255,6 +255,18 @@ export interface PromptLibrary {
   packs: Pack[];
 }
 
+export interface RemoteStatus {
+  enabled: boolean;
+  token: string;
+  public_url: string;
+  web_ui_url: string;
+  tunnel_mode: "off" | "auto";
+  tunnel: { state: "off" | "starting" | "up" | "error" | "missing"; url: string; error: string; installed: boolean };
+  effective_url: string;
+  port: number;
+  engine_env: boolean;
+}
+
 export interface FsEntry {
   name: string;
   path: string;

@@ -1,3 +1,4 @@
+import { isRemote } from "../connection";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Copy, EyeOff, Eye, Heart, History, ImagePlus, Pencil, Shuffle, Trash2 } from "lucide-react";
 import { api } from "../api";
@@ -83,7 +84,7 @@ export function Details() {
       </div>
       <div className="detailcols">
         <div className="detail-img">
-          <img src={api.imageUrl(img.id)} alt={img.prompt} width={img.width} height={img.height} />
+          <img src={api.stageUrl(img.id)} alt={img.prompt} width={img.width} height={img.height} />
         </div>
         <div className="detail-info">
           <div className="date">
@@ -143,7 +144,7 @@ export function Details() {
             <button className="btn" onClick={() => void patch(img.id, { hidden: !img.hidden })} title={t("hide.hint")}>
               {img.hidden ? <Eye size={14} /> : <EyeOff size={14} />} {img.hidden ? t("unhide") : t("hide")}
             </button>
-            {confirm ? (
+            {isRemote() ? null : confirm ? (
               <>
                 <button className="btn danger solid" onClick={() => { void del(img.id).then(() => setPage("library")); }}><Trash2 size={14} /> {t("confirm.deleteFile")}</button>
                 <button className="btn ghost" onClick={() => setConfirm(false)}>{t("cancel")}</button>
@@ -152,7 +153,7 @@ export function Details() {
               <button className="btn danger" onClick={() => setConfirm(true)}><Trash2 size={14} /> {t("delete")}</button>
             )}
           </div>
-          {confirm && <p className="note small">{t("delete.warn")}</p>}
+          {confirm && !isRemote() && <p className="note small">{t("delete.warn")}</p>}
         </div>
       </div>
     </div>

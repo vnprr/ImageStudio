@@ -221,3 +221,12 @@ interface Settings {
 - UI nie wysyła pól nieobsługiwanych przez `capabilities` modelu (`cfg`, `sampler`, `scheduler`, `denoise`, `negative_prompt` są pomijane).
 - `GET /api/catalog`: `size_bytes` jest teraz `0` — UI w takim wypadku ukrywa rozmiar (dokładny rozmiar pokazuje `GET /api/hf/inspect`).
 - Maska wysyłana jako PNG (biały = zmieniaj) o dłuższym boku 1024 px i proporcjach źródła; backend ma ją przeskalować do `width×height`.
+
+## Zdalny dostęp
+
+- `GET /api/ping` → `{ok, app: "image-studio", remote, media?}`; zdalnie zwraca też pochodny token mediów (do `<img>` i SSE).
+- `GET /api/remote` → stan: `enabled`, `token`, `public_url`, `web_ui_url`, `tunnel{state,url,error,installed}`, `effective_url`. **Tylko lokalnie.**
+- `PUT /api/remote` `{enabled?, public_url?, web_ui_url?, tunnel?: "off"|"auto"}`, `POST /api/remote/rotate`, `POST /api/remote/tunnel` `{action: "start"|"stop"}`. **Tylko lokalnie.**
+- `GET /api/images/{id}/preview` → podgląd WebP (do 1600 px) do przeglądania przez sieć.
+- Klient zdalny wysyła `Authorization: Bearer <token>`; media i `/api/events` przyjmują `?token=<token mediów>`. Dozwolone endpointy zdalne
+  są wymienione w `backend/remote.py` (`_ALLOWED`); reszta zwraca 403. `/api/settings`, `/api/models` i `/api/loras` nie zawierają ścieżek.

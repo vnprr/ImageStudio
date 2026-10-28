@@ -1,7 +1,8 @@
 // Jedyny adapter do backendu FastAPI. Wszystkie dane UI przechodzą przez ten plik.
+import { getConn } from "./connection";
 import type {
   CatalogEntry, DownloadState, FsListing, GenerationRequest, ImageFilter, ImageRecord, ImageSort,
-  Job, LibraryStats, LoraInfo, ModelInfo, Preset, PromptLibrary, RepoInspect, SaveFormat, Settings, SystemStats,
+  Job, LibraryStats, LoraInfo, ModelInfo, Preset, PromptLibrary, RemoteStatus, RepoInspect, SaveFormat, Settings, SystemStats,
 } from "./types";
 
 export class ApiError extends Error {
@@ -12,13 +13,23 @@ export class ApiError extends Error {
   }
 }
 
+/** Adres zasobu (obraz, plik do pobrania): przy zdalnym silniku z adresem serwera i tokenem mediów (<img> nie wysyła nagłówków). */
+export function media(path: string): string {
+  const c = getConn();
+  return c ? `${c.base}${path}${path.includes("?") ? "&" : "?"}token=${encodeURIComponent(c.media)}` : path;
+}
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
+  const c = getConn();
+  const headers = new Headers(init?.headers);
+  if (c) headers.set("Authorization", `Bearer ${c.token}`);
   try {
-    res = await fetch("/api" + path, init);
+    res = await fetch((c?.base ?? "") + "/api" + path, { ...init, headers });
   } catch {
     throw new ApiError("Brak połączenia z backendem", 0);
   }
+  if (res.status === 401) window.dispatchEvent(new Event("is:unauthorized"));
   if (!res.ok) {
     let detail = res.statusText;
     try {
@@ -50,6 +61,10 @@ export interface ExportBody { format: SaveFormat; quality?: number; dest_dir: st
 
 export const api = {
   system: () => call<SystemStats>("/system"),
+  remoteStatus: () => call<RemoteStatus>("/remote"),
+  remoteUpdate: (b: Partial<{ enabled: boolean; public_url: string; web_ui_url: string; tunnel: "off" | "auto" }>) => call<RemoteStatus>("/remote", json("PUT", b)),
+  remoteRotate: () => call<RemoteStatus>("/remote/rotate", { method: "POST" }),
+  remoteTunnel: (action: "start" | "stop") => call<RemoteStatus>("/remote/tunnel", json("POST", { action })),
   settings: () => call<Settings>("/settings"),
   putSettings: (s: Settings) => call<Settings>("/settings", json("PUT", s)),
   fsList: (path: string) => call<FsListing>("/fs/list" + qs({ path })),
@@ -94,11 +109,13 @@ export const api = {
   promptLibrary: () => call<PromptLibrary>("/prompt-library"),
   putPromptLibrary: (d: PromptLibrary) => call<PromptLibrary>("/prompt-library", json("PUT", d)),
 
-  imageUrl: (id: string) => `/api/images/${id}/file`,
-  thumbUrl: (id: string) => `/api/images/${id}/thumb`,
-  uploadUrl: (id: string) => `/api/uploads/${id}`,
+  imageUrl: (id: string) => media(`/api/images/${id}/file`),
+  thumbUrl: (id: string) => media(`/api/images/${id}/thumb`),
+  /** do wyświetlania na scenie: przez sieć lekki podgląd WebP zamiast oryginalnego PNG */
+  stageUrl: (id: string) => media(getConn() ? `/api/images/${id}/preview` : `/api/images/${id}/file`),
+  uploadUrl: (id: string) => media(`/api/uploads/${id}`),
   downloadUrl: (id: string, format: SaveFormat, quality: number, metadata: boolean) =>
-    `/api/images/${id}/download` + qs({ format, quality, metadata: metadata ? 1 : 0 }),
+    media(`/api/images/${id}/download` + qs({ format, quality, metadata: metadata ? 1 : 0 })),
 };
 
 // ---------------------------------------------------------------- SSE
@@ -118,7 +135,7 @@ export function connectEvents(
 
   const open = () => {
     if (stopped) return;
-    es = new EventSource("/api/events");
+    es = new EventSource(media("/api/events"));
     es.onopen = () => { delay = 1000; onStatus(true); };
     for (const t of types) {
       es.addEventListener(t, (e) => {

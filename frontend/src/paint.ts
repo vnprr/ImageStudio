@@ -178,6 +178,7 @@ export async function renderMaskPng(d: PaintDoc, aspect: number, maxSide = 1024)
 export async function renderDoodled(url: string, d: PaintDoc): Promise<Blob> {
   const img = await new Promise<HTMLImageElement>((res, rej) => {
     const im = new Image();
+    im.crossOrigin = "anonymous";                 // obraz z zdalnego silnika: bez tego płótno byłoby „skażone" i toBlob by zawiódł
     im.onload = () => res(im);
     im.onerror = () => rej(new Error("image"));
     im.src = url;
