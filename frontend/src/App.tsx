@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, CheckCircle2, Info, LayoutGrid, Menu, RefreshCw, Settings as Cog, Sparkles, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, Info, LayoutGrid, RefreshCw, Settings as Cog, SlidersHorizontal, Sparkles, X } from "lucide-react";
 import { tr, useT } from "./i18n";
 import { IS_WEB, getConn, isRemote, setConn } from "./connection";
-import { isDesktop } from "./lib";
-import { pendingJobs, useStore } from "./store";
+import { IMAGE_DRAG, applyTheme, isDesktop } from "./lib";
+import { activeJobOf, pendingJobs, selModel, useStore } from "./store";
 import { Composer } from "./components/Composer";
 import { Connect } from "./components/Connect";
 import { ContextMenu, editMenu } from "./components/ContextMenu";
@@ -65,6 +65,30 @@ function Toasts() {
   );
 }
 
+/** Wąski ekran: prompt i „Generuj" są pod sceną, a pełne parametry otwierają się z szuflady. */
+function MobileBar({ onParams }: { onParams: () => void }) {
+  const t = useT();
+  const prompt = useStore((s) => s.form.prompt);
+  const setForm = useStore((s) => s.setForm);
+  const submit = useStore((s) => s.submit);
+  const model = useStore(selModel);
+  const online = useStore((s) => s.online);
+  const jobs = useStore((s) => s.jobs);
+  const active = activeJobOf(jobs);
+  const pending = pendingJobs(jobs).length;
+  const ready = !!model && model.status === "ready" && !!online;
+  return (
+    <div className="mobile-bar">
+      <button className="icon-btn big" aria-label={t("params.title")} title={t("params.title")} onClick={onParams}><SlidersHorizontal size={18} /></button>
+      <textarea rows={2} value={prompt} placeholder={t("prompt.placeholder")} aria-label={t("prompt.title")} onChange={(e) => setForm({ prompt: e.target.value }, true)} />
+      <button className="generate compact" disabled={!ready} aria-label={t("generate")} onClick={() => void submit()}>
+        {active ? <Spinner size={16} /> : <Sparkles size={18} />}
+        {pending > 0 && <b>{pending}</b>}
+      </button>
+    </div>
+  );
+}
+
 export default function App() {
   const t = useT();
   const online = useStore((s) => s.online);
@@ -82,6 +106,17 @@ export default function App() {
   const pending = pendingJobs(jobs).length;
 
   useEffect(() => { useStore.getState().boot(); }, []);
+
+  // motyw: wybór z ustawień; „auto" reaguje na zmianę motywu systemu
+  const theme = useStore((s) => s.ui.theme);
+  useEffect(() => {
+    applyTheme(theme);
+    if (theme !== "auto") return;
+    const mq = window.matchMedia("(prefers-color-scheme: light)");
+    const on = () => applyTheme("auto");
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, [theme]);
 
   // na wąskich ekranach schowaj panel po wystartowaniu generowania
   const prevPending = useRef(0);
@@ -144,16 +179,22 @@ export default function App() {
   // Upuszczenie plików poza strefą nic nie robi, ale też nie pozwala przeglądarce otworzyć pliku zamiast aplikacji.
   useEffect(() => {
     let depth = 0;
-    const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes("Files");
+    const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes("Files") || !!e.dataTransfer?.types.includes(IMAGE_DRAG);
     const zoneEl = (t: EventTarget | null) => (t as HTMLElement | null)?.closest?.<HTMLElement>("[data-dropzone]") ?? null;
     const zoneOf = (t: EventTarget | null) => zoneEl(t)?.dataset.dropzone ?? null;
     const hotOf = (t: EventTarget | null) => { const el = zoneEl(t); return el ? el.dataset.dropid ?? el.dataset.dropzone ?? null : null; };
-    const reset = () => { depth = 0; useStore.setState({ dragging: false, hotZone: null }); };
-    const enter = (e: DragEvent) => { if (hasFiles(e)) { e.preventDefault(); depth++; useStore.setState({ dragging: true }); } };
+    const reset = () => { depth = 0; document.body.classList.remove("drag-internal"); useStore.setState({ dragging: false, hotZone: null }); };
+    const enter = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      depth++;
+      document.body.classList.toggle("drag-internal", !!e.dataTransfer?.types.includes(IMAGE_DRAG));
+      useStore.setState({ dragging: true });
+    };
     const over = (e: DragEvent) => {
       if (!hasFiles(e)) return;
       e.preventDefault();
-      if (e.dataTransfer) e.dataTransfer.dropEffect = zoneOf(e.target) ? "copy" : "none";
+      if (e.dataTransfer) e.dataTransfer.dropEffect = zoneOf(e.target) === "attach" || (zoneOf(e.target) === "library" && !e.dataTransfer.types.includes(IMAGE_DRAG)) ? "copy" : "none";
       const hot = hotOf(e.target);
       if (useStore.getState().hotZone !== hot) useStore.setState({ hotZone: hot });
     };
@@ -163,9 +204,14 @@ export default function App() {
       e.preventDefault();
       const zone = zoneOf(e.target);
       reset();
+      const s = useStore.getState();
+      const inner = e.dataTransfer?.getData(IMAGE_DRAG);
+      if (inner) {
+        if (zone === "attach") void s.attachRecord(inner);
+        return;
+      }
       const files = [...(e.dataTransfer?.files ?? [])];
       if (!files.length) return;
-      const s = useStore.getState();
       if (zone === "attach" || zone === "library") void s.addFiles(files, zone);
       else s.toast("info", tr("drop.outside"));
     };
@@ -223,6 +269,7 @@ export default function App() {
   const navBtn = (p: "studio" | "library", label: string, Ico: typeof Sparkles) => (
     <button className={"nav " + ((page === p || (p === "library" && page === "details")) ? "active" : "")} title={label} aria-label={label} onClick={() => setPage(p)}>
       <Ico size={19} />
+      <span className="nav-label">{label}</span>
     </button>
   );
 
@@ -230,20 +277,19 @@ export default function App() {
     <div className={"app " + (sideOpen ? "side-open" : "")} style={{ ["--sidebar-width" as string]: `${width}px` }}>
       <nav className="rail">
         <Logo />
-        {navBtn("studio", t("nav.workspace"), Sparkles)}
+        {navBtn("studio", t("nav.studio"), Sparkles)}
         {navBtn("library", t("nav.library"), LayoutGrid)}
         <div className="rail-spacer" />
         {pending > 0 && page !== "studio" && <button className="nav pulse" title={t("gen.inQueue", { n: pending })} onClick={() => setPage("studio")}><Spinner size={16} /></button>}
-        <button className={"nav " + (page === "settings" ? "active" : "")} title={`${t("settings.title")} (Ctrl+,)`} aria-label={t("settings.title")} onClick={() => setPage("settings")}><Cog size={19} /></button>
+        <button className={"nav " + (page === "settings" ? "active" : "")} title={`${t("settings.title")} (Ctrl+,)`} aria-label={t("settings.title")} onClick={() => setPage("settings")}><Cog size={19} /><span className="nav-label">{t("settings.title")}</span></button>
       </nav>
 
-      {page === "studio" && <Sidebar onResizeStart={startResize} />}
+      {page === "studio" && <Sidebar onResizeStart={startResize} onClose={() => setSideOpen(false)} />}
       {page === "studio" && sideOpen && <div className="scrim" onClick={() => setSideOpen(false)} />}
 
       <main className="main">
         <header className="topbar">
           <div className="top-left">
-            {page === "studio" && <button className="btn icononly mobile-menu" aria-label={t("menu")} onClick={() => setSideOpen(!sideOpen)}><Menu size={16} /></button>}
             <div>
               <div className="crumb">IMAGE STUDIO / {crumb}</div>
               <h1>{title}</h1>
@@ -253,7 +299,7 @@ export default function App() {
             {(page === "studio" || page === "details") && <SaveMenu image={selected} />}
           </div>
         </header>
-        {page === "studio" && <><Stage /><History /></>}
+        {page === "studio" && <><Stage /><MobileBar onParams={() => setSideOpen(true)} /><History /></>}
         {page === "library" && <Library />}
         {page === "details" && <Details />}
         {page === "settings" && <Settings />}

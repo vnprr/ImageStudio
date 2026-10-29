@@ -439,6 +439,11 @@ def api_images(query: str = "", filter: Literal["all", "favorite", "hidden"] = "
     return library.list_images(query, filter, sort, model_id, limit, offset)
 
 
+@app.get("/api/library/days")
+def api_library_days(query: str = "", filter: Literal["all", "favorite", "hidden"] = "all", sort: Literal["new", "old"] = "new", model_id: str | None = None):
+    return library.day_counts(query, filter, sort, model_id)
+
+
 @app.get("/api/library/stats")
 def api_lib_stats():
     return library.stats()

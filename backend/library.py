@@ -165,8 +165,7 @@ def preview_path(iid: str, side: int = 1600) -> Path | None:
     return p
 
 
-def list_images(query: str = "", flt: str = "all", sort: str = "new", model_id: str | None = None,
-                limit: int = 60, offset: int = 0) -> dict:
+def _filters(query: str, flt: str, model_id: str | None) -> tuple[str, list]:
     where, args = [], []
     if flt == "hidden":
         where.append("hidden=1")
@@ -180,7 +179,21 @@ def list_images(query: str = "", flt: str = "all", sort: str = "new", model_id: 
         if tok:
             where.append("search_text LIKE ? ESCAPE '\\'")
             args.append("%" + tok.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%")
-    w = " AND ".join(where)
+    return " AND ".join(where), args
+
+
+def day_counts(query: str = "", flt: str = "all", sort: str = "new", model_id: str | None = None) -> list[dict]:
+    """Liczba obrazów w poszczególnych dniach (czas lokalny) w kolejności listy: do nagłówków dni i osi czasu przy przewijaniu."""
+    w, args = _filters(query, flt, model_id)
+    order = "ASC" if sort == "old" else "DESC"
+    rows = db.conn().execute(
+        f"SELECT date(created_at/1000, 'unixepoch', 'localtime') AS day, COUNT(*) AS n FROM images WHERE {w} GROUP BY day ORDER BY day {order}", args).fetchall()
+    return [{"day": r["day"], "count": r["n"]} for r in rows]
+
+
+def list_images(query: str = "", flt: str = "all", sort: str = "new", model_id: str | None = None,
+                limit: int = 60, offset: int = 0) -> dict:
+    w, args = _filters(query, flt, model_id)
     order = "ASC" if sort == "old" else "DESC"
     c = db.conn()
     total = c.execute(f"SELECT COUNT(*) FROM images WHERE {w}", args).fetchone()[0]

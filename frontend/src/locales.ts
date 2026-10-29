@@ -530,6 +530,21 @@ const rows: Row[] = [
   ["remote.bypass", "Registration key (protected site)", "Klucz rejestracji (strona z logowaniem)", "Registrierungsschlüssel (geschützte Seite)", "Clé d’enregistrement (site protégé)", "Clave de registro (sitio protegido)"],
   ["remote.bypassHint", "Lets this computer register its address on your login-protected web version (Vercel automation bypass secret).", "Pozwala temu komputerowi zarejestrować adres w Twojej wersji web chronionej logowaniem (sekret „automation bypass” z Vercela).", "Erlaubt diesem Computer, seine Adresse in deiner login-geschützten Web-Version zu registrieren (Vercel-Automation-Bypass-Secret).", "Permet à cet ordinateur d’enregistrer son adresse dans votre version web protégée par connexion (secret de contournement Vercel).", "Permite que este ordenador registre su dirección en tu versión web protegida con inicio de sesión (secreto de bypass de Vercel)."],
   ["connect.errOffline", "The engine is offline or has not registered. Check that the computer is on and remote access is enabled.", "Silnik jest offline albo się nie zarejestrował. Sprawdź, czy komputer jest włączony, a zdalny dostęp aktywny.", "Die Engine ist offline oder nicht registriert. Prüfe, ob der Computer läuft und der Fernzugriff aktiv ist.", "Le moteur est hors ligne ou non enregistré. Vérifiez que l’ordinateur est allumé et l’accès à distance actif.", "El motor está fuera de línea o no se registró. Comprueba que el ordenador esté encendido y el acceso remoto activo."],
+  ["gallery.group", "Group by day", "Grupuj według dni", "Nach Tag gruppieren", "Grouper par jour", "Agrupar por día"],
+  ["date.today", "Today", "Dzisiaj", "Heute", "Aujourd’hui", "Hoy"],
+  ["date.yesterday", "Yesterday", "Wczoraj", "Gestern", "Hier", "Ayer"],
+  ["history.resize", "Drag to resize the history", "Przeciągnij, aby zmienić wysokość historii", "Ziehen, um die Höhe des Verlaufs zu ändern", "Glisser pour redimensionner l’historique", "Arrastra para cambiar la altura del historial"],
+  ["seed.auto", "Auto (random each time)", "Automatyczne (losowe za każdym razem)", "Automatisch (jedes Mal zufällig)", "Auto (aléatoire à chaque fois)", "Automático (aleatorio cada vez)"],
+  ["seed.dice", "Pick a random seed", "Wylosuj ziarno", "Zufälligen Seed würfeln", "Tirer une graine au hasard", "Elegir una semilla al azar"],
+  ["ratio.change", "Change orientation / ratio", "Zmień orientację / proporcje", "Ausrichtung / Verhältnis ändern", "Changer l’orientation / le ratio", "Cambiar orientación / proporción"],
+  ["theme.title", "Appearance", "Wygląd", "Darstellung", "Apparence", "Apariencia"],
+  ["theme.auto", "System", "Systemowy", "System", "Système", "Sistema"],
+  ["theme.dark", "Dark", "Ciemny", "Dunkel", "Sombre", "Oscuro"],
+  ["theme.light", "Light", "Jasny", "Hell", "Clair", "Claro"],
+  ["stage.loading", "Loading image…", "Wczytywanie obrazu…", "Bild wird geladen…", "Chargement de l’image…", "Cargando imagen…"],
+  ["menu.open", "Menu", "Menu", "Menü", "Menu", "Menú"],
+  ["attach.already", "That image is already in the list.", "Ten obraz jest już na liście.", "Dieses Bild ist bereits in der Liste.", "Cette image est déjà dans la liste.", "Esa imagen ya está en la lista."],
+  ["nav.studio", "Create", "Twórz", "Erstellen", "Créer", "Crear"],
 ];
 
 function build(): Record<Lang, Record<string, string>> {

@@ -4,8 +4,9 @@ import App from "./App";
 import "@fontsource-variable/inter";
 import "@fontsource-variable/jetbrains-mono";
 import "./styles.css";
-import { isDesktop } from "./lib";
+import { applyTheme, isDesktop, readTheme } from "./lib";
 
+applyTheme(readTheme());
 if (isDesktop()) document.documentElement.dataset.desktop = "1";
 
 createRoot(document.getElementById("root")!).render(

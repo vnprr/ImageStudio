@@ -102,6 +102,8 @@ export const api = {
     return call<ImageRecord[]>("/images/import", { method: "POST", body: fd });
   },
   exportImage: (id: string, body: ExportBody) => call<{ path: string }>(`/images/${id}/export`, json("POST", body)),
+  libraryDays: (p: { query?: string; filter?: ImageFilter; sort?: ImageSort; model_id?: string }) =>
+    call<{ day: string; count: number }[]>("/library/days" + qs(p)),
   libraryStats: () => call<LibraryStats>("/library/stats"),
 
   presets: () => call<Preset[]>("/presets"),

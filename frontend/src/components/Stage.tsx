@@ -58,6 +58,8 @@ export function Stage() {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [nat, setNat] = useState<{ w: number; h: number } | null>(null);
+  // adres obrazu, który już się wczytał; do tego czasu w ramce jest puste „płótno" w proporcjach nowego obrazu (bez deformacji starego)
+  const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const [cmpAt, setCmpAt] = useState(50);
   const [dismissedErr, setDismissedErr] = useState<string | null>(null);
   const [panning, setPanning] = useState(false);
@@ -184,12 +186,16 @@ export function Stage() {
         onContextMenu={(e) => { if (!painting && selected && !showSource) showMenu(e, imageMenu(selected)); }}
       >
         {imgUrl ? (
-          <div className="pic" style={{ width: fitW, height: fitH, transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}>
+          <div className={"pic " + (loadedUrl === imgUrl ? "" : "loading")} style={{ width: fitW, height: fitH, transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}>
             <img
+              key={imgUrl}
+              ref={(el) => { if (el && el.complete && el.naturalWidth && loadedUrl !== imgUrl) setLoadedUrl(imgUrl); }}
               src={imgUrl}
               alt={name}
               draggable={false}
-              onLoad={(e) => setNat({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+              className={loadedUrl === imgUrl ? "ready" : ""}
+              onLoad={(e) => { setNat({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight }); setLoadedUrl(imgUrl); }}
+              onError={() => setLoadedUrl(imgUrl)}
             />
             {comparing && beforeUrl && (
               <>

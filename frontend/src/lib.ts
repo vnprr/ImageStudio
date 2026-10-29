@@ -26,6 +26,25 @@ export function fmtEta(s: number | null): string {
   return `${(s / 3600).toFixed(1)} h`;
 }
 
+/** Dzień „RRRR-MM-DD" z API → lokalna data (północ). */
+export function parseDay(d: string): Date {
+  const [y, m, da] = d.split("-").map(Number);
+  return new Date(y, (m || 1) - 1, da || 1);
+}
+
+/** Nagłówek dnia: „Dzisiaj", „Wczoraj" albo „środa, 28 października 2026". */
+export function fmtDayHead(day: string, lang: string, today: string, yesterday: string): string {
+  const d = parseDay(day);
+  const diff = Math.round((new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()).getTime() - d.getTime()) / 86400000);
+  if (diff === 0) return today;
+  if (diff === 1) return yesterday;
+  try { return d.toLocaleDateString(lang, { weekday: "long", day: "numeric", month: "long", year: "numeric" }); } catch { return day; }
+}
+
+export function fmtMonth(day: string, lang: string): string {
+  try { return parseDay(day).toLocaleDateString(lang, { month: "short", year: "numeric" }); } catch { return day.slice(0, 7); }
+}
+
 export function fmtDate(ms: number, lang: string, withTime = false): string {
   const d = new Date(ms);
   const opts: Intl.DateTimeFormatOptions = withTime
@@ -126,4 +145,31 @@ export function isDesktop(): boolean {
     if (new URLSearchParams(location.search).get("desktop") === "1") sessionStorage.setItem("is.desktop", "1");
     return sessionStorage.getItem("is.desktop") === "1";
   } catch { return false; }
+}
+
+// ------------------------------------------------------------ przeciąganie obrazów między miejscami w aplikacji
+
+export const IMAGE_DRAG = "application/x-is-image";
+
+/** Podpina identyfikator obrazu do przeciąganego elementu (miniatura w historii albo w galerii). */
+export function startImageDrag(e: React.DragEvent, id: string): void {
+  e.dataTransfer.setData(IMAGE_DRAG, id);
+  e.dataTransfer.effectAllowed = "copy";
+}
+
+// ------------------------------------------------------------ motyw (auto / ciemny / jasny)
+
+export type ThemePref = "auto" | "dark" | "light";
+const THEME_KEY = "is.theme";
+
+export function readTheme(): ThemePref {
+  try { const v = localStorage.getItem(THEME_KEY); return v === "dark" || v === "light" ? v : "auto"; } catch { return "auto"; }
+}
+
+/** Ustawia motyw na <html>; „auto" podąża za systemem. Wybór trzymany osobno, żeby zastosować go przed pierwszym malowaniem. */
+export function applyTheme(pref: ThemePref): void {
+  try { localStorage.setItem(THEME_KEY, pref); } catch { /* tryb prywatny */ }
+  const dark = pref === "dark" || (pref === "auto" && !window.matchMedia("(prefers-color-scheme: light)").matches);
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#000000" : "#f6f7f9");
 }

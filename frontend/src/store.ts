@@ -52,6 +52,14 @@ export interface UiPrefs {
   /** rozmiar miniatury w widoku listy */
   listThumb: number;
   galleryView: "grid" | "list";
+  /** nagłówki dni w galerii i historii */
+  groupByDay: boolean;
+  /** wysokość dolnej historii (px), ustawiana uchwytem na jej górnej krawędzi */
+  historyH: number;
+  /** ostatnia wybrana proporcja (postać pozioma, np. 3:2) i orientacja przed przejściem na 1:1: dla przycisku proporcji */
+  baseRatio: string;
+  prevOrient: "landscape" | "portrait";
+  theme: "auto" | "dark" | "light";
   /** pasek narzędzi malowania zwinięty do paska „—" */
   paintBarMin: boolean;
 }
@@ -91,7 +99,7 @@ const defaultForm: Form = {
 const defaultUi: UiPrefs = {
   sidebarWidth: 340, historyClosed: false, advancedOpen: false, loraOpen: true,
   saveFormat: "png", saveQuality: 92, saveMeta: true, activePreset: "", applied: [], brush: 40,
-  paintLayer: "mask", paintTool: "brush", doodleColor: "#ff3d81", historyThumb: 72, galleryThumb: 190, listThumb: 96, galleryView: "grid", paintBarMin: false,
+  paintLayer: "mask", paintTool: "brush", doodleColor: "#ff3d81", historyThumb: 72, galleryThumb: 190, listThumb: 96, galleryView: "grid", groupByDay: true, historyH: 150, baseRatio: "3:2", prevOrient: "landscape", theme: "auto", paintBarMin: false,
 };
 
 interface State {
@@ -156,6 +164,8 @@ interface Actions {
   patchImage: (id: string, p: { favorite?: boolean; hidden?: boolean }) => Promise<void>;
   deleteImage: (id: string) => Promise<void>;
   addFiles: (files: File[], target: "attach" | "library") => Promise<void>;
+  /** obraz z biblioteki przeciągnięty na listę obrazów */
+  attachRecord: (id: string) => Promise<void>;
   useAsSource: (r: ImageRecord) => void;
   addAsRef: (r: ImageRecord) => void;
   setRole: (id: string, role: AttachRole) => void;
@@ -667,6 +677,15 @@ export const useStore = create<Store>()(
             const u = await api.upload(f, f.name);
             addAttachment({ ref: { upload_id: u.upload_id }, url: api.uploadUrl(u.upload_id), name: f.name, width: u.width, height: u.height });
           }
+        } catch (e) { get().toast("error", (e as Error).message); }
+      },
+
+      attachRecord: async (id) => {
+        try {
+          const r = await get().getImage(id);
+          if (!r) return;
+          if (get().attachments.some((a) => "image_id" in a.ref && a.ref.image_id === id)) return get().toast("info", tr("attach.already"));
+          addAttachment({ ref: { image_id: r.id }, url: api.imageUrl(r.id), name: r.prompt.slice(0, 40), width: r.width, height: r.height });
         } catch (e) { get().toast("error", (e as Error).message); }
       },
 

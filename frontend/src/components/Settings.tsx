@@ -220,6 +220,12 @@ export function Settings() {
             </select>
           </div>
         </div>
+        <div className="spaced">
+          <span className="label">{t("theme.title")}</span>
+          <div className="seg" role="group" aria-label={t("theme.title")}>
+            {(["auto", "dark", "light"] as const).map((k) => <button key={k} className={ui.theme === k ? "active" : ""} onClick={() => setUi({ theme: k })}>{t(`theme.${k}`)}</button>)}
+          </div>
+        </div>
       </div>
 
       <RemoteAccess />

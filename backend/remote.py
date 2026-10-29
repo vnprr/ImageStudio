@@ -37,7 +37,7 @@ LOOPBACK = {"127.0.0.1", "localhost", "[::1]"}
 
 # (metoda, wzorzec ścieżki) dozwolone dla klienta zdalnego z głównym tokenem
 _ALLOWED = [
-    ("GET", r"/api/(ping|system|events|models|loras|jobs|images|library/stats|presets|prompt-library|settings)"),
+    ("GET", r"/api/(ping|system|events|models|loras|jobs|images|library/(stats|days)|presets|prompt-library|settings)"),
     ("GET", r"/api/(jobs|images|uploads)/[^/]+"),
     ("GET", r"/api/images/[^/]+/(file|thumb|preview|download)"),
     ("POST", r"/api/(jobs|uploads|images/import|models/unload)"),

@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Dices, Image as ImageIcon, Layers, Check, Pencil, Plus, RefreshCw, RotateCw, Sparkles, Trash2, X, ArrowLeftRight, Paintbrush, Power } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Dices, Shuffle, Image as ImageIcon, Layers, Check, Pencil, Plus, RefreshCw, RotateCcw, Sparkles, Trash2, X, ArrowLeftRight, Paintbrush, Power } from "lucide-react";
 import { useT } from "../i18n";
 import { activeJobOf, pendingJobs, selCaps, selModel, useStore } from "../store";
 import { detectRatio, dimsFor, fmtBytes, isPortrait, MODES, ratioText, ratiosFor } from "../lib";
@@ -221,22 +221,23 @@ function PresetsSection() {
 
 // ------------------------------------------------------------------ Parametry (podstawowe + przełącznik zaawansowanych)
 
-/** Przycisk orientacji: prostokąt ze strzałką obrotu, obracany o 90° zależnie od układu; dla 1:1 nieaktywny kwadrat. */
-function OrientButton({ w, h, onSwap }: { w: number; h: number; onSwap: () => void }) {
+const flipRatio = (r: string) => r.split(":").reverse().join(":");
+
+/** Przycisk proporcji: prostokąt przyjmuje bieżące proporcje (3:2, 4:5, 1:1 …) i płynnie zmienia kształt po kliknięciu,
+ *  a mała strzałka ↺ obraca się o ćwierć obrotu. Kolejne kliknięcia: poziomo → 1:1 → pionowo → 1:1 → poziomo. */
+function OrientButton({ w, h, turns, title, onClick }: { w: number; h: number; turns: number; title: string; onClick: () => void }) {
   const t = useT();
-  const square = w === h;
-  const portrait = isPortrait(w, h);
+  const k = w / h;
+  const S = 14;
+  const rw = k >= 1 ? S : S * k;
+  const rh = k >= 1 ? S / k : S;
   return (
-    <button
-      className={"orient " + (square ? "square" : portrait ? "portrait" : "landscape")}
-      disabled={square}
-      title={square ? t("params.orient.square") : t(portrait ? "params.orient.toLandscape" : "params.orient.toPortrait")}
-      aria-label={t("params.swap")}
-      onClick={onSwap}
-    >
+    <button className="orient" title={title} aria-label={t("ratio.change")} onClick={onClick}>
       <span className="orient-ico">
-        <i className="orient-rect" />
-        {!square && <RotateCw size={11} className="orient-arrow" />}
+        <svg viewBox="0 0 26 26" width="26" height="26" aria-hidden="true">
+          <rect className="orient-rect" style={{ x: 12 - rw / 2, y: 12 - rh / 2, width: rw, height: rh }} rx="2.4" />
+        </svg>
+        <RotateCcw size={10} className="orient-arrow" style={{ transform: `rotate(${-90 * turns}deg)` }} />
       </span>
     </button>
   );
@@ -249,14 +250,38 @@ function ParamsSection() {
   const advanced = useStore((s) => s.ui.advancedOpen);
   const setUi = useStore((s) => s.setUi);
   const setForm = useStore((s) => s.setForm);
+  const baseRatio = useStore((s) => s.ui.baseRatio);
+  const prevOrient = useStore((s) => s.ui.prevOrient);
+  const [turns, setTurns] = useState(0);
+  const ratio0 = detectRatio(form.width, form.height);
+  const portrait0 = isPortrait(form.width, form.height);
+  // zapamiętujemy ostatnią niekwadratową proporcję (postać pozioma), do której wraca przycisk po przejściu przez 1:1
+  useEffect(() => {
+    if (ratio0 === "custom" || ratio0 === "1:1") return;
+    const base = portrait0 ? flipRatio(ratio0) : ratio0;
+    if (base !== useStore.getState().ui.baseRatio) setUi({ baseRatio: base });
+  }, [ratio0, portrait0, setUi]);
   if (!caps) return null;
   const m = caps.resolution.multiple;
+  const square = form.width === form.height;
   const portrait = isPortrait(form.width, form.height);
   const ratio = detectRatio(form.width, form.height);
   const long = Math.max(form.width, form.height);
   const presets = caps.resolution.presets;
   const setDims = (r: string, res: number) => setForm(dimsFor(r, res, m));
   const swap = () => setForm({ width: form.height, height: form.width });
+  // następny krok: poziomo → 1:1 → pionowo → 1:1 → poziomo; niestandardowe wymiary po prostu się odwracają
+  let nextRatio: string | null = null;
+  if (ratio === "custom" && !square) nextRatio = null;
+  else if (square) nextRatio = prevOrient === "landscape" ? flipRatio(baseRatio) : baseRatio;
+  else nextRatio = "1:1";
+  const cycle = () => {
+    setTurns((n) => n + 1);
+    if (nextRatio == null) return swap();
+    if (!square) setUi({ prevOrient: portrait ? "portrait" : "landscape" });
+    setDims(nextRatio, long);
+  };
+  const orientTitle = nextRatio == null ? t("params.orient.toPortrait") : `${t("ratio.change")}: ${nextRatio}`;
   const dim = (key: "width" | "height", v: number) => setForm({ [key]: Math.min(caps.resolution.max, Math.max(caps.resolution.min, Math.round(v / m) * m)) });
   const showDenoise = caps.denoise && caps.denoise.modes.includes(form.mode);
 
@@ -271,7 +296,7 @@ function ParamsSection() {
                 {ratiosFor(portrait).map((r) => <option key={r} value={r}>{r}</option>)}
                 {ratio === "custom" && <option value="custom">{form.width}×{form.height}</option>}
               </select>
-              <OrientButton w={form.width} h={form.height} onSwap={swap} />
+              <OrientButton w={form.width} h={form.height} turns={turns} title={orientTitle} onClick={cycle} />
             </div>
           </div>
           <div>
@@ -310,7 +335,8 @@ function ParamsSection() {
               <Label k="seed" def={t("seed.random")} />
               <div className="with-btn">
                 <input type="number" value={form.seed} onChange={(e) => setForm({ seed: Math.trunc(Number(e.target.value)) }, true)} aria-label="seed" />
-                <button className="icon-btn" title={t("seed.randomize")} onClick={() => setForm({ seed: -1 }, true)}><Dices size={14} /></button>
+                <button className="icon-btn" title={t("seed.dice")} aria-label={t("seed.dice")} onClick={() => setForm({ seed: Math.floor(Math.random() * 4294967295) }, true)}><Dices size={14} /></button>
+                {form.seed !== -1 && <button className="icon-btn" title={t("seed.auto")} aria-label={t("seed.auto")} onClick={() => setForm({ seed: -1 }, true)}><Shuffle size={14} /></button>}
               </div>
             </div>
             <div>
@@ -449,13 +475,14 @@ function GenerateBar() {
 
 // ------------------------------------------------------------------ całość
 
-export function Sidebar({ onResizeStart }: { onResizeStart: (e: React.PointerEvent) => void }) {
+export function Sidebar({ onResizeStart, onClose }: { onResizeStart: (e: React.PointerEvent) => void; onClose?: () => void }) {
   const t = useT();
   return (
     <aside className="sidebar">
       <div className="brand">
         <div className="eyebrow">{t("brand.eyebrow")}</div>
         <div className="brandline"><b>Image Studio</b></div>
+        {onClose && <button className="icon-btn drawer-close" aria-label={t("close")} title={t("close")} onClick={onClose}><X size={16} /></button>}
       </div>
       <div className="scroll">
         <ModelSection />
